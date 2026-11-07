@@ -5,7 +5,7 @@ Follow these instructions to set up the project for local development. This setu
 ## Prerequisites
 
 - **Node.js**: version 22+ is recommended.
-- **A running instance of the [ForkMyFolio Backend](https://github.com/NemesisGuy/ForkMyFolio-backend)**. The frontend needs the backend API to function.
+- **A running instance of the ForkMyFolio backend** (included in this repository under `backend/`). The frontend needs the backend API to function.
 
 ---
 
@@ -13,8 +13,8 @@ Follow these instructions to set up the project for local development. This setu
 
 1.  **Clone this repository:**
     ```bash
-    git clone https://github.com/NemesisGuy/ForkMyFolio-frontend.git
-    cd ForkMyFolio-frontend
+    git clone https://github.com/NemesisGuy/forkmyfolio-oss.git
+    cd forkmyfolio-oss/frontend-admin
     ```
 
 2.  **Install NPM dependencies:**
@@ -24,7 +24,7 @@ Follow these instructions to set up the project for local development. This setu
     ```
 
 3.  **Configure the Backend API URL (for Local Development):**
-    By default, the application expects the backend to be running at `http://localhost:8080`. If your backend is on a different URL, you must manually change the fallback value in `src/services/api/apiClient.js`.
+    By default, the application expects the backend to be running at `http://localhost:8080`. In local development, the `/api/v1` fallback in `src/services/api/apiClient.ts` is forwarded to the backend by the dev proxy in `vite.config.js`. If your backend runs on a different URL or port, adjust the proxy target in `vite.config.js`.
 
     The application does **not** use `.env` files for this purpose.
 
