@@ -1,6 +1,7 @@
 name: Public Frontend CI
 
 on:
+  workflow_dispatch:
   push:
     paths: ["frontend-public/**", ".github/workflows/frontend-public-ci.yml"]
   pull_request:

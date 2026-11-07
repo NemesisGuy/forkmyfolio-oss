@@ -1,6 +1,7 @@
 name: Admin Frontend CI
 
 on:
+  workflow_dispatch:
   push:
     paths: ["frontend-admin/**", ".github/workflows/frontend-admin-ci.yml"]
   pull_request:
