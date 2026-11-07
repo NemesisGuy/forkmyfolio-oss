@@ -1,0 +1,48 @@
+# ForkMyFolio reverse-proxy template — PROXY_MODE: detached
+#
+# The Vue SPA is served by an external host at its own origin; this proxy
+# serves only the API and Nuxt SSR. There is deliberately NO frontend upstream
+# in this template: when the frontend service is absent from the stack, nothing
+# here can fail to resolve (the same-host template would abort at start — by
+# design, via nginx -t). SPA routes arriving at this proxy fall through to
+# Nuxt; the external SPA origin never sends them here.
+#
+# Rendered at container start by 20-envsubst-on-templates.sh; only the
+# ${UPSTREAM_*} and ${CLIENT_MAX_BODY_SIZE} environment variables are
+# substituted; nginx runtime variables are preserved. No secrets belong here.
+
+upstream nuxt {
+    server ${UPSTREAM_NUXT};
+}
+
+upstream app {
+    server ${UPSTREAM_APP};
+}
+
+server {
+    listen 80;
+    server_name _;
+
+    # Upload ceiling for bodies proxied to the backend (backup restore, media).
+    client_max_body_size ${CLIENT_MAX_BODY_SIZE};
+
+    # API proxy to backend
+    location /api/ {
+        proxy_pass http://app;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    # Everything else - Nuxt SSR public portfolio
+    location / {
+        proxy_pass http://nuxt;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}

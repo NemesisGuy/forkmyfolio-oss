@@ -1,0 +1,9 @@
+target
+.git
+*.log
+archunit_store
+secrets.properties
+.env*
+*.key
+*.pem
+*.jks

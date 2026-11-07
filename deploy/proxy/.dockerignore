@@ -1,0 +1,6 @@
+# Build context is only these files; exclude everything else by default
+*
+!Dockerfile
+!README.md
+!validate-and-start.sh
+!templates/

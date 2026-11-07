@@ -1,0 +1,161 @@
+# ForkMyFolio — example deployment stack
+#
+# Builds all application images from this repository's source and deploys the
+# full stack behind the bundled nginx reverse proxy. Single published port.
+#
+#   1. cp .env.example .env   (then fill in real values)
+#   2. docker compose -f docker-compose.example.yml up -d --build
+#
+# Status: validated — this exact stack is exercised end-to-end (build,
+# 5/5 healthchecks, authenticated API round trip) as part of the project's
+# release verification.
+
+services:
+  proxy:
+    build: ./deploy/proxy
+    restart: unless-stopped
+    ports:
+      # Host port is overridable via FMF_HOST_PORT in .env (default 8089).
+      - "${FMF_HOST_PORT:-8089}:80"
+    environment:
+      - PROXY_MODE=same-host
+      # Upstreams must include their ports (matches the proxy image contract;
+      # omitting them makes nginx connect on port 80 and fail with 502).
+      - UPSTREAM_FRONTEND=frontend:80
+      - UPSTREAM_NUXT=nuxt:3000
+      - UPSTREAM_APP=app:8080
+    depends_on:
+      frontend:
+        condition: service_healthy
+      app:
+        condition: service_healthy
+      nuxt:
+        condition: service_started
+    networks:
+      - edge
+      - internal
+
+  app:
+    build: ./backend
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      - SPRING_PROFILES_ACTIVE=prod
+      - SPRING_DATASOURCE_URL=jdbc:mysql://db:3306/forkmyfolio_db?createDatabaseIfNotExist=true&useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true
+      - DB_USERNAME=${DB_USERNAME:?set DB_USERNAME in .env}
+      - DB_PASSWORD=${DB_APP_PASSWORD:?set DB_APP_PASSWORD in .env}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:?set JWT_SECRET_KEY in .env}
+      - APP_CORS_ALLOWED_ORIGINS=${APP_CORS_ALLOWED_ORIGINS:-http://localhost:8089,http://127.0.0.1:8089}
+      - SERVER_PORT=8080
+      # Access tokens are short-lived (1 h); the HttpOnly refresh cookie
+      # (14 days) keeps sessions alive via the refresh flow.
+      - JWT_EXPIRATION_MS=3600000
+      - JWT_REFRESH_EXPIRATION_MS=1209600000
+      - SPRING_JPA_HIBERNATE_DDL_AUTO=update
+      # Cookie hardening is env-driven so HTTPS deployments can set
+      # APP_COOKIE_SECURE=true (see .env.example).
+      - APP_SECURITY_COOKIE_DOMAIN=${APP_SECURITY_COOKIE_DOMAIN:-}
+      - APP_COOKIE_SECURE=${APP_COOKIE_SECURE:-false}
+      - APP_COOKIE_SAMESITE=${APP_COOKIE_SAMESITE:-Lax}
+      - SERVER_FORWARD_HEADERS_STRATEGY=framework
+      - ADMIN_EMAIL=${ADMIN_EMAIL:-admin@example.com}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:?set ADMIN_PASSWORD in .env}
+      - APP_ADMIN_EMAIL=${ADMIN_EMAIL:-admin@example.com}
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - SPRING_CACHE_TYPE=redis
+      - JAVA_TOOL_OPTIONS=-Xms256m -XX:MaxRAMPercentage=75 -XX:+ExitOnOutOfMemoryError
+      - ANALYTICS_ENCRYPTION_KEY=${ANALYTICS_ENCRYPTION_KEY:?set ANALYTICS_ENCRYPTION_KEY in .env}
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    networks:
+      - internal
+
+  frontend:
+    build: ./frontend-admin
+    restart: unless-stopped
+    environment:
+      - VITE_API_BASE_URL=/api/v1
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1/"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    networks:
+      - edge
+
+  nuxt:
+    build: ./frontend-public
+    restart: unless-stopped
+    environment:
+      - NUXT_PUBLIC_API_BASE_URL=/api/v1
+      - NUXT_API_BASE_URL=http://app:8080/api/v1
+      - NUXT_PUBLIC_INDEXABLE=${NUXT_PUBLIC_INDEXABLE:-true}
+      - NODE_ENV=production
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    networks:
+      - edge
+      - internal
+
+  redis:
+    image: redis:7.4-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--maxmemory", "128mb", "--maxmemory-policy", "allkeys-lru", "--save", "", "--appendonly", "no"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+    networks:
+      - internal
+
+  db:
+    image: mysql:8.0.42
+    restart: unless-stopped
+    environment:
+      # Deliberately separate from the application DB password (least privilege).
+      - MYSQL_ROOT_PASSWORD=${DB_PASSWORD:?set DB_PASSWORD in .env}
+      - MYSQL_DATABASE=forkmyfolio_db
+      # The official MySQL entrypoint creates this application account and
+      # grants it access to MYSQL_DATABASE — the app never uses root.
+      - MYSQL_USER=${DB_USERNAME:?set DB_USERNAME in .env}
+      - MYSQL_PASSWORD=${DB_APP_PASSWORD:?set DB_APP_PASSWORD in .env}
+    command:
+      - --innodb-buffer-pool-size=256M
+      - --max-connections=100
+      - --innodb-flush-log-at-trx-commit=2
+    volumes:
+      - forkmyfolio_mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${DB_PASSWORD:?set DB_PASSWORD in .env}"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    networks:
+      - internal
+
+networks:
+  edge:
+    driver: bridge
+  internal:
+    driver: bridge
+
+volumes:
+  forkmyfolio_mysql_data:
+    driver: local

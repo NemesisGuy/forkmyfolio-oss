@@ -1,0 +1,99 @@
+# ForkMyFolio reverse-proxy template — PROXY_MODE: same-host
+#
+# Rendered at container start by the official nginx image's
+# 20-envsubst-on-templates.sh: only the ${UPSTREAM_*} and
+# ${CLIENT_MAX_BODY_SIZE} environment variables are substituted; nginx runtime
+# variables ($host, $scheme, ...) are preserved. No secrets belong in this
+# file — upstream service names and non-secret tuning values only.
+
+upstream frontend {
+    server ${UPSTREAM_FRONTEND};
+}
+
+upstream nuxt {
+    server ${UPSTREAM_NUXT};
+}
+
+upstream app {
+    server ${UPSTREAM_APP};
+}
+
+server {
+    listen 80;
+    server_name _;
+
+    # Upload ceiling for bodies proxied to the backend (backup restore, media).
+    # The nginx default of 1m would reject backup-restore uploads with 413.
+    client_max_body_size ${CLIENT_MAX_BODY_SIZE};
+
+    # API proxy to backend
+    location /api/ {
+        proxy_pass http://app;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    # Authenticated routes to Vue SPA
+    # Login / Register / Terms / Admin
+    location ~ ^/(login|register|force-password-change|accept-terms|guest-access|admin) {
+        proxy_pass http://frontend;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    # Vue SPA static assets (prevent Nuxt interception)
+    location /assets/ {
+        proxy_pass http://frontend;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+    location = /config.js {
+        proxy_pass http://frontend;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        # Runtime config must never be stale-cached: reconfiguration takes
+        # effect on the next fetch without a frontend rebuild.
+        add_header Cache-Control "no-cache";
+    }
+    location = /favicon.ico {
+        proxy_pass http://frontend;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    # User management routes :slug/manage/*
+    location ~ ^/[^/]+/manage/ {
+        proxy_pass http://frontend;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    # Public routes - provisioned for Nuxt SSR
+    # Public portfolio routes go to Nuxt, authenticated routes handled above.
+    location / {
+        proxy_pass http://nuxt;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}

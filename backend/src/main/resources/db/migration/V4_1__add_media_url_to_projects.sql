@@ -1,0 +1,1 @@
+ALTER TABLE projects ADD COLUMN media_url VARCHAR(2048);

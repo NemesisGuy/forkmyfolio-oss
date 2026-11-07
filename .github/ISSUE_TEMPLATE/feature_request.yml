@@ -1,0 +1,40 @@
+name: Feature request
+description: Suggest an idea or improvement for ForkMyFolio
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Feature ideas are welcome. Please check existing issues first to avoid duplicates.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem or motivation
+      description: What are you trying to achieve? What limitation did you hit?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: What you'd like to happen, and any alternatives you considered.
+    validations:
+      required: true
+  - type: dropdown
+    id: component
+    attributes:
+      label: Component
+      options:
+        - backend (Spring Boot API)
+        - frontend-admin (Vue dashboard)
+        - frontend-public (Nuxt site)
+        - proxy / docker-compose deployment
+        - documentation
+    validations:
+      required: true
+  - type: checkboxes
+    id: contribution
+    attributes:
+      label: Contribution
+      options:
+        - label: I am willing to help implement this feature

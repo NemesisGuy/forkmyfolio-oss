@@ -1,0 +1,482 @@
+/* ==========================================================================
+   Theme-Adaptive Glassmorphic Styles
+   ========================================================================== */
+
+/* --- CSS Custom Properties for Theme Adaptation --- */
+:root {
+  /* Light mode glassmorphic variables */
+  --glass-bg: rgba(255, 255, 255, 0.45);
+  --glass-bg-hover: rgba(255, 255, 255, 0.55);
+  --glass-border: rgba(255, 255, 255, 0.2);
+  --glass-border-hover: rgba(255, 255, 255, 0.4);
+  --glass-shadow: rgba(31, 38, 135, 0.3);
+  --glass-text: rgba(0, 0, 0, 0.95);
+  --glass-text-secondary: rgba(0, 0, 0, 0.85);
+  /* FIX: was rgba(255,255,255,0.1) — a 10% white wash that failed to dim the
+     page behind modals, leaving modal text fighting the content behind it. */
+  --glass-backdrop: rgba(0, 0, 0, 0.45);
+  --glass-shimmer: rgba(255, 255, 255, 0.4);
+  --glass-reflection: rgba(255, 255, 255, 0.6);
+  /* FIX: Add a dedicated variable for modals for better control.
+     Was 0.6 — too washed out; 0.88 keeps a hint of frost while text stays readable. */
+  --glass-bg-modal: rgba(255, 255, 255, 0.88);
+}
+
+/* Dark mode glassmorphic variables */
+[data-bs-theme='dark'] {
+  --glass-bg: rgba(16, 16, 16, 0.4);
+  --glass-bg-hover: rgba(16, 16, 16, 0.6);
+  --glass-border: rgba(255, 255, 255, 0.125);
+  --glass-border-hover: rgba(255, 255, 255, 0.2);
+  --glass-shadow: rgba(0, 0, 0, 0.5);
+  --glass-text: rgba(255, 255, 255, 0.95);
+  --glass-text-secondary: rgba(255, 255, 255, 0.7);
+  /* FIX: was rgba(0,0,0,0.2) — barely dimmed; modals floated over bright content. */
+  --glass-backdrop: rgba(0, 0, 0, 0.6);
+  --glass-shimmer: rgba(255, 255, 255, 0.15);
+  --glass-reflection: rgba(255, 255, 255, 0.1);
+  /* FIX: Add a dedicated variable for modals for better control.
+     Was rgba(16,16,16,0.55) — too washed out in dark mode. */
+  --glass-bg-modal: rgba(24, 24, 27, 0.88);
+}
+
+/* --- Keyframes --- */
+@keyframes glassShimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+/* ==========================================================================
+   Theme-Adaptive Glass Components
+   ========================================================================== */
+
+/* --- Glass Navbar --- */
+.navbar.glass-nav {
+  background: var(--glass-bg);
+  backdrop-filter: blur(15px) saturate(180%);
+  -webkit-backdrop-filter: blur(15px) saturate(180%);
+  border-bottom: 1px solid var(--glass-border) !important; /* Override Bootstrap */
+  transition:
+    background 0.3s ease,
+    border-color 0.3s ease;
+}
+
+/* --- Base Glass Card --- */
+.glass-card {
+  position: relative;
+  overflow: hidden;
+  background: var(--glass-bg);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border: 1px solid var(--glass-border);
+  border-radius: 1.5rem;
+  box-shadow:
+    0 8px 32px var(--glass-shadow),
+    inset 0 1px 0 var(--glass-border);
+  /* FIX: Avoid 'transition: all' for performance. Transition only specific, animatable properties. */
+  transition-property: transform, background, border-color, box-shadow;
+  transition-duration: 0.4s;
+  transition-timing-function: cubic-bezier(0.25, 1, 0.5, 1);
+  color: var(--glass-text);
+}
+
+.glass-card:hover {
+  background: var(--glass-bg-hover);
+  border-color: var(--glass-border-hover);
+  box-shadow:
+    0 16px 48px var(--glass-shadow),
+    inset 0 1px 0 var(--glass-border-hover);
+}
+
+/* Glass reflection effect */
+.glass-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, var(--glass-reflection), transparent);
+  transition: left 0.7s ease;
+  z-index: 0;
+}
+
+.glass-card:hover::before {
+  left: 100%;
+}
+
+/* Ensure content is above pseudo-elements */
+.glass-card > * {
+  position: relative;
+  z-index: 1;
+  /* THIS IS THE GLOBAL FIX for the invisible content issue.
+     It forces direct children of the card (like .card-body) onto their own
+     GPU layer, ensuring they render above any pseudo-element overlays
+     (like the shimmer/reflection effect), especially when transforms/animations are active. */
+  transform: translateZ(0);
+}
+
+/* --- Shimmering Glass Card --- */
+.glass-card.shimmering {
+  background: linear-gradient(
+    135deg,
+    rgba(16, 16, 16, 0.6),
+    rgba(32, 32, 32, 0.4),
+    rgba(16, 16, 16, 0.6)
+  );
+  background-size: 300% 300%;
+  animation: animated-gradient-animation 18s ease infinite;
+}
+
+.glass-card.shimmering::before {
+  background: linear-gradient(90deg, transparent, var(--glass-shimmer), transparent);
+  animation: glassShimmer 3s ease-in-out infinite;
+  left: -100%;
+}
+
+/* --- Floating Glass Effect --- */
+.glass-card-floating {
+  animation: floatingGlow 8s ease-in-out infinite;
+}
+
+.glass-card-floating:hover {
+  animation-play-state: paused;
+}
+
+/* --- Glass Modal --- */
+.modal-content.glass-modal {
+  /* FIX: Inject !important to ensure we win against Bootstrap's [data-bs-theme='dark'] .modal-content */
+  background: var(--glass-bg-modal) !important;
+  background-color: var(--glass-bg-modal) !important;
+  backdrop-filter: blur(30px) saturate(200%);
+  -webkit-backdrop-filter: blur(30px) saturate(200%);
+  border: 1px solid var(--glass-border) !important;
+  border-radius: 2rem;
+  box-shadow:
+    0 25px 80px var(--glass-shadow),
+    inset 0 1px 0 var(--glass-border);
+  color: var(--glass-text) !important;
+}
+
+/*
+   EXTRA SPECIFICITY: Ensures that even if Bootstrap's dark mode variables
+   are leaking into a light-themed page, our glassmorphic modals stay light.
+*/
+[data-bs-theme='light'] .modal-content.glass-modal {
+  /* FIX: keep in sync with --glass-bg-modal (0.88) so the extra-specificity
+     rule doesn't reintroduce the washed-out surface. */
+  background-color: rgba(255, 255, 255, 0.88) !important;
+  background: rgba(255, 255, 255, 0.88) !important;
+}
+
+/* ADDED: Glassmorphic backdrop for all standard Bootstrap modals */
+.modal-backdrop.show {
+  opacity: 1 !important; /* Override Bootstrap's default opacity */
+  background-color: var(--glass-backdrop) !important;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+/* --- Content Styling --- */
+.glass-text {
+  color: var(--glass-text) !important;
+}
+
+.glass-subtitle {
+  color: var(--glass-text-secondary) !important;
+}
+
+.glass-title {
+  color: var(--glass-text) !important;
+  font-weight: 600;
+}
+
+.glass-description {
+  color: var(--glass-text-secondary) !important;
+  opacity: 0.9;
+}
+
+/* --- Enhanced Buttons --- */
+.glass-btn {
+  background: var(--glass-bg);
+  backdrop-filter: blur(15px);
+  -webkit-backdrop-filter: blur(15px);
+  border: 1px solid var(--glass-border);
+  color: var(--glass-text);
+  transition: all 0.3s ease;
+}
+
+.glass-btn:hover {
+  background: var(--glass-bg-hover);
+  border-color: var(--glass-border-hover);
+  color: var(--glass-text);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 25px var(--glass-shadow);
+}
+
+.glass-btn-primary {
+  background: rgba(var(--bs-primary-rgb), 0.8);
+  backdrop-filter: blur(15px);
+  -webkit-backdrop-filter: blur(15px);
+  border: 1px solid rgba(var(--bs-primary-rgb), 0.9);
+  color: #fff !important; /* White text for contrast */
+  transition: all 0.3s ease;
+}
+
+.glass-btn-primary:hover {
+  background: rgba(var(--bs-primary-rgb), 1);
+  border-color: rgba(var(--bs-primary-rgb), 1);
+  color: #fff !important;
+  transform: translateY(-2px);
+  box-shadow: 0 8px 25px rgba(var(--bs-primary-rgb), 0.4);
+}
+
+/*
+  FIX: The default Bootstrap .btn-outline-secondary can have low contrast
+  inside a .glass-modal in light mode. These rules override Bootstrap's CSS
+  variables to increase the border and text contrast for better visibility.
+*/
+[data-bs-theme='light'] .glass-modal .btn-outline-secondary {
+  --bs-btn-color: var(--glass-text-secondary);
+  --bs-btn-border-color: rgba(0, 0, 0, 0.2);
+}
+
+[data-bs-theme='light'] .glass-modal .btn-outline-secondary:hover {
+  --bs-btn-hover-bg: rgba(0, 0, 0, 0.075);
+  --bs-btn-hover-border-color: rgba(0, 0, 0, 0.3);
+  --bs-btn-hover-color: var(--glass-text);
+}
+
+/* --- Glass Dropdown Menu --- */
+.dropdown-menu.glass-dropdown {
+  background: var(--glass-bg);
+  backdrop-filter: blur(15px) saturate(180%);
+  -webkit-backdrop-filter: blur(15px) saturate(180%);
+  border: 1px solid var(--glass-border);
+  border-radius: 0.75rem; /* Standard dropdown radius */
+  box-shadow: 0 8px 32px var(--glass-shadow);
+  padding: 0.5rem 0;
+  margin-top: 0.5rem !important; /* Add some space from the navbar */
+}
+
+.dropdown-menu.glass-dropdown .dropdown-item {
+  color: var(--glass-text);
+  transition:
+    background-color 0.2s ease,
+    color 0.2s ease;
+}
+
+[data-bs-theme='dark'] .dropdown-menu.glass-dropdown .dropdown-item:hover,
+[data-bs-theme='dark'] .dropdown-menu.glass-dropdown .dropdown-item:focus {
+  background-color: rgba(255, 255, 255, 0.1);
+  color: #fff;
+}
+
+[data-bs-theme='light'] .dropdown-menu.glass-dropdown .dropdown-item:hover,
+[data-bs-theme='light'] .dropdown-menu.glass-dropdown .dropdown-item:focus {
+  background-color: rgba(0, 0, 0, 0.05);
+  color: #000;
+}
+
+.dropdown-menu.glass-dropdown .dropdown-divider {
+  border-top: 1px solid var(--glass-border);
+}
+
+/* --- Icon and Badge Styling --- */
+.qual-icon {
+  font-size: 2.8rem;
+  color: var(--bs-primary);
+  line-height: 1;
+  filter: drop-shadow(0 2px 8px rgba(var(--bs-primary-rgb), 0.3));
+  transition: all 0.3s ease;
+}
+
+.glass-card:hover .qual-icon {
+  transform: scale(1.05);
+  filter: drop-shadow(0 4px 12px rgba(var(--bs-primary-rgb), 0.4));
+}
+
+.year-badge {
+  font-weight: 700;
+  font-size: 1.3rem;
+  color: var(--bs-primary);
+  background: rgba(var(--bs-primary-rgb), 0.1);
+  padding: 0.5rem 1rem;
+  border-radius: 2rem;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(var(--bs-primary-rgb), 0.15);
+  transition: all 0.3s ease;
+}
+
+.glass-card:hover .year-badge {
+  background: rgba(var(--bs-primary-rgb), 0.15);
+  border-color: rgba(var(--bs-primary-rgb), 0.25);
+  transform: scale(1.03);
+  box-shadow: 0 4px 20px rgba(var(--bs-primary-rgb), 0.2);
+}
+
+.year-badge-large {
+  font-size: 2rem;
+  font-weight: 800;
+  color: var(--bs-primary);
+  background: rgba(var(--bs-primary-rgb), 0.1);
+  padding: 1rem 1.5rem;
+  border-radius: 2rem;
+  backdrop-filter: blur(15px);
+  -webkit-backdrop-filter: blur(15px);
+  border: 2px solid rgba(var(--bs-primary-rgb), 0.2);
+  text-align: center;
+  box-shadow: 0 8px 30px rgba(var(--bs-primary-rgb), 0.15);
+}
+
+/* --- Tech Badge Styling --- */
+.tech-badge {
+  font-weight: 500;
+  padding: 0.4em 0.7em;
+  background-color: rgba(var(--bs-primary-rgb), 0.1) !important;
+  color: var(--bs-primary) !important;
+  border: 1px solid rgba(var(--bs-primary-rgb), 0.2);
+  border-radius: 0.5rem;
+  transition: all 0.3s ease;
+}
+
+.tech-badge:hover {
+  background-color: rgba(var(--bs-primary-rgb), 0.2) !important;
+  transform: translateY(-1px);
+}
+
+/* --- Enhanced Skeleton Loaders --- */
+.skeleton-line,
+.skeleton-icon,
+.skeleton-year-badge {
+  background: linear-gradient(90deg, var(--glass-bg), var(--glass-bg-hover), var(--glass-bg));
+  background-size: 200% 100%;
+  animation: glassShimmer 2s ease-in-out infinite;
+  border-radius: 0.5rem;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid var(--glass-border);
+}
+
+.skeleton-icon {
+  width: 45px;
+  height: 45px;
+  border-radius: 1rem;
+}
+
+.skeleton-title {
+  width: 80%;
+  height: 22px;
+  margin-bottom: 0.75rem;
+}
+
+.skeleton-subtitle {
+  width: 60%;
+  height: 18px;
+  margin-bottom: 0.5rem;
+}
+
+.skeleton-grade {
+  width: 40%;
+  height: 14px;
+  margin-bottom: 0.25rem;
+}
+
+.skeleton-year-badge {
+  width: 60px;
+  height: 32px;
+  border-radius: 2rem;
+}
+
+/* --- Hover Indicators --- */
+.glass-hover-indicator {
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  color: var(--bs-primary);
+}
+
+.glass-card:hover .glass-hover-indicator {
+  opacity: 0.7;
+}
+
+/* --- Empty State Styling --- */
+.empty-state-icon {
+  font-size: 4rem;
+  color: var(--bs-primary);
+  opacity: 0.8;
+  animation: floatingGlow 6s ease-in-out infinite;
+}
+
+/* --- Responsive Design --- */
+@media (max-width: 768px) {
+  .glass-card {
+    border-radius: 1.2rem;
+    backdrop-filter: blur(15px);
+    -webkit-backdrop-filter: blur(15px);
+  }
+
+  .qual-icon {
+    font-size: 2.2rem;
+  }
+
+  .year-badge {
+    font-size: 1.1rem;
+    padding: 0.4rem 0.8rem;
+  }
+}
+
+/* --- Accessibility & Performance --- */
+@media (prefers-reduced-motion: reduce) {
+  .glass-card,
+  .skeleton-line,
+  .skeleton-icon,
+  .skeleton-year-badge,
+  .glass-card-floating,
+  .empty-state-icon {
+    animation: none;
+  }
+
+  .glass-card::before {
+    display: none;
+  }
+
+  .glass-card,
+  .glass-btn {
+    transition: none;
+  }
+}
+
+/* --- Focus States for Accessibility --- */
+.glass-card:focus-visible {
+  outline: 2px solid var(--bs-primary);
+  outline-offset: 4px;
+}
+
+.glass-btn:focus-visible {
+  outline: 2px solid var(--bs-primary);
+  outline-offset: 2px;
+}
+
+/* --- High Contrast Mode Support --- */
+@media (prefers-contrast: more) {
+  .glass-card {
+    border-width: 2px;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+
+  .glass-text,
+  .glass-title {
+    color: var(--bs-body-color) !important;
+  }
+
+  .glass-subtitle,
+  .glass-description {
+    color: var(--bs-secondary-color) !important;
+  }
+}

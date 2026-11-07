@@ -1,0 +1,26 @@
+# ── Environment / secrets (never commit) ─────────────────────────────────────
+.env
+.env.*
+!.env.example
+secrets.properties
+
+# ── Dependencies ─────────────────────────────────────────────────────────────
+node_modules/
+
+# ── Build outputs ────────────────────────────────────────────────────────────
+target/
+dist/
+.nuxt/
+.output/
+.data/
+coverage/
+
+# ── Logs & runtime artifacts ─────────────────────────────────────────────────
+*.log
+*.local
+
+# ── Editor / OS ──────────────────────────────────────────────────────────────
+.idea/
+.vscode/
+*.swp
+.DS_Store

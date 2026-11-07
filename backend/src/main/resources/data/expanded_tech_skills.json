@@ -1,0 +1,206 @@
+[
+    {
+        "name": "Java",
+        "category": "Programming",
+        "icon": "devicon-java-plain",
+        "description": "Object-oriented language commonly used in backend systems and Android apps."
+    },
+    {
+        "name": "Python",
+        "category": "Programming",
+        "icon": "devicon-python-plain",
+        "description": "Versatile, high-level language used for data science, automation, and web development."
+    },
+    {
+        "name": "JavaScript",
+        "category": "Programming",
+        "icon": "devicon-javascript-plain",
+        "description": "Essential language for web development enabling dynamic behavior on websites."
+    },
+    {
+        "name": "TypeScript",
+        "category": "Programming",
+        "icon": "devicon-typescript-plain",
+        "description": "Superset of JavaScript with static typing for large-scale applications."
+    },
+    {
+        "name": "Go",
+        "category": "Programming",
+        "icon": "devicon-go-plain",
+        "description": "Compiled language from Google designed for simplicity and performance."
+    },
+    {
+        "name": "Rust",
+        "category": "Programming",
+        "icon": "devicon-rust-plain",
+        "description": "Memory-safe system programming language known for performance and safety."
+    },
+    {
+        "name": "C#",
+        "category": "Programming",
+        "icon": "devicon-csharp-plain",
+        "description": "Language developed by Microsoft for building desktop, web, and game applications."
+    },
+    {
+        "name": "PHP",
+        "category": "Programming",
+        "icon": "devicon-php-plain",
+        "description": "Server-side scripting language primarily used for web development."
+    },
+    {
+        "name": "Vue.js",
+        "category": "Frontend",
+        "icon": "devicon-vuejs-plain",
+        "description": "Progressive JavaScript framework for building interactive user interfaces."
+    },
+    {
+        "name": "React",
+        "category": "Frontend",
+        "icon": "devicon-react-plain",
+        "description": "JavaScript library for building modern, component-based UIs."
+    },
+    {
+        "name": "Angular",
+        "category": "Frontend",
+        "icon": "devicon-angularjs-plain",
+        "description": "TypeScript-based framework for building scalable web applications."
+    },
+    {
+        "name": "Svelte",
+        "category": "Frontend",
+        "icon": "devicon-svelte-plain",
+        "description": "Compiler-based JavaScript framework with minimal runtime overhead."
+    },
+    {
+        "name": "HTML5",
+        "category": "Frontend",
+        "icon": "devicon-html5-plain",
+        "description": "Standard markup language for structuring content on the web."
+    },
+    {
+        "name": "CSS3",
+        "category": "Frontend",
+        "icon": "devicon-css3-plain",
+        "description": "Style sheet language used for describing presentation of web pages."
+    },
+    {
+        "name": "Bootstrap",
+        "category": "Frontend",
+        "icon": "devicon-bootstrap-plain",
+        "description": "Popular CSS framework for responsive and mobile-first web design."
+    },
+    {
+        "name": "Tailwind CSS",
+        "category": "Frontend",
+        "icon": "devicon-tailwindcss-plain",
+        "description": "Utility-first CSS framework for rapidly building custom UI designs."
+    },
+    {
+        "name": "Spring Boot",
+        "category": "Framework",
+        "icon": "devicon-spring-plain",
+        "description": "Framework for creating stand-alone, production-ready Java applications."
+    },
+    {
+        "name": "Express.js",
+        "category": "Framework",
+        "icon": "devicon-express-original",
+        "description": "Minimal and flexible Node.js web application framework."
+    },
+    {
+        "name": "Django",
+        "category": "Framework",
+        "icon": "devicon-django-plain",
+        "description": "High-level Python web framework promoting rapid development."
+    },
+    {
+        "name": "Laravel",
+        "category": "Framework",
+        "icon": "devicon-laravel-plain",
+        "description": "PHP framework for web artisans with elegant syntax."
+    },
+    {
+        "name": "FastAPI",
+        "category": "Framework",
+        "icon": "",
+        "description": "Modern Python web framework for building APIs quickly."
+    },
+    {
+        "name": "Docker",
+        "category": "DevOps",
+        "icon": "devicon-docker-plain",
+        "description": "Tool for packaging applications and dependencies in containers."
+    },
+    {
+        "name": "Kubernetes",
+        "category": "DevOps",
+        "icon": "devicon-kubernetes-plain",
+        "description": "System for automating deployment, scaling, and management of containerized apps."
+    },
+    {
+        "name": "Jenkins",
+        "category": "DevOps",
+        "icon": "devicon-jenkins-plain",
+        "description": "Automation server for building, testing, and deploying software."
+    },
+    {
+        "name": "GitLab CI/CD",
+        "category": "DevOps",
+        "icon": "devicon-gitlab-plain",
+        "description": "Built-in DevOps pipelines in GitLab for continuous integration and deployment."
+    },
+    {
+        "name": "Terraform",
+        "category": "DevOps",
+        "icon": "devicon-terraform-plain",
+        "description": "Infrastructure as code tool for building and managing cloud infrastructure."
+    },
+    {
+        "name": "MySQL",
+        "category": "Database",
+        "icon": "devicon-mysql-plain",
+        "description": "Open-source relational database management system."
+    },
+    {
+        "name": "PostgreSQL",
+        "category": "Database",
+        "icon": "devicon-postgresql-plain",
+        "description": "Advanced open-source RDBMS with strong SQL compliance."
+    },
+    {
+        "name": "MongoDB",
+        "category": "Database",
+        "icon": "devicon-mongodb-plain",
+        "description": "NoSQL database known for flexibility and scalability."
+    },
+    {
+        "name": "Redis",
+        "category": "Database",
+        "icon": "devicon-redis-plain",
+        "description": "In-memory data structure store often used as a cache or message broker."
+    },
+    {
+        "name": "Git",
+        "category": "Tooling",
+        "icon": "devicon-git-plain",
+        "description": "Version control system for tracking code changes."
+    },
+    {
+        "name": "GitHub",
+        "category": "Tooling",
+        "icon": "devicon-github-original",
+        "description": "Platform for hosting and collaborating on Git repositories."
+    },
+    {
+        "name": "VS Code",
+        "category": "Tooling",
+        "icon": "devicon-vscode-plain",
+        "description": "Popular source-code editor with debugging and Git support."
+    },
+    {
+        "name": "IntelliJ IDEA",
+        "category": "Tooling",
+        "icon": "",
+        "description": "IDE optimized for Java and Kotlin development."
+    }
+]

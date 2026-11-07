@@ -1,0 +1,62 @@
+[
+    {
+        "name": "Java",
+        "category": "Programming",
+        "icon": "devicon-java-plain",
+        "description": "A popular object-oriented programming language used in enterprise applications, Android development, and backend services."
+    },
+    {
+        "name": "Spring Boot",
+        "category": "Framework",
+        "icon": "devicon-spring-plain",
+        "description": "A Java-based framework for building stand-alone, production-grade Spring applications with minimal configuration."
+    },
+    {
+        "name": "MySQL",
+        "category": "Database",
+        "icon": "devicon-mysql-plain",
+        "description": "An open-source relational database management system widely used for web and enterprise applications."
+    },
+    {
+        "name": "Docker",
+        "category": "DevOps",
+        "icon": "devicon-docker-plain",
+        "description": "A platform for developing, shipping, and running applications in isolated containers for consistency across environments."
+    },
+    {
+        "name": "Vue.js",
+        "category": "Frontend",
+        "icon": "devicon-vuejs-plain",
+        "description": "A progressive JavaScript framework used to build user interfaces and single-page applications."
+    },
+    {
+        "name": "JavaScript",
+        "category": "Programming",
+        "icon": "devicon-javascript-plain",
+        "description": "A versatile scripting language primarily used for interactive web development on the client side."
+    },
+    {
+        "name": "Python",
+        "category": "Programming",
+        "icon": "devicon-python-plain",
+        "description": "A high-level, interpreted language known for its simplicity and use in web, data science, automation, and AI."
+    },
+    {
+        "name": "Git",
+        "category": "Tooling",
+        "icon": "devicon-git-plain",
+        "description": "A distributed version control system for tracking changes in source code during software development."
+    },
+    {
+        "name": "HTML5",
+        "category": "Frontend",
+        "icon": "devicon-html5-plain",
+        "description": "The standard markup language for creating web pages and web applications."
+    },
+    {
+        "name": "CSS3",
+        "category": "Frontend",
+        "icon": "devicon-css3-plain",
+        "description": "The latest evolution of the Cascading Style Sheets language used for designing web layouts and appearance."
+    }
+]

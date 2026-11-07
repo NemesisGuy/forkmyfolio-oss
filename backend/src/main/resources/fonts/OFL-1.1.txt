@@ -1,0 +1,100 @@
+SIL OPEN FONT LICENSE Version 1.1 - 26 February 2007
+------------------------------------------------------------
+
+PREAMBLE
+The goals of the Open Font License (OFL) are to stimulate worldwide
+development of collaborative font projects, to support the font creation
+efforts of academic and linguistic communities, and to provide a free and
+open framework in which fonts may be shared and improved in partnership
+with others.
+
+The OFL allows the licensed fonts to be used, studied, modified and
+redistributed freely as long as they are not sold by themselves. The
+fonts, including any derivative works, can be bundled, embedded,
+redistributed and/or sold with any software provided that any reserved
+names are not used by derivative works. The fonts and derivatives,
+however, cannot be released under any other type of license. The
+requirement for fonts to remain under the license does not apply to any
+document created using the fonts or their derivatives.
+
+DEFINITIONS
+"Font Software" refers to the set of files released by the Copyright
+Holder(s) under this license and clearly marked as such. This may include
+source files, build scripts and documentation.
+
+"Reserved Font Name" refers to any names specified as such after the
+copyright statement(s) in this original font license.
+
+"Modified Version" refers to any derivative made by adding to, deleting,
+or substituting -- in part or in whole -- any of the components of the
+Original Version, by changing formats or by porting the Font Software to
+a new environment.
+
+"Author" refers to any designer, engineer, programmer, technical writer
+or other person who contributed to the Font Software.
+
+PERMISSION & CONDITIONS
+Permission is hereby granted, free of charge, to any person obtaining a
+copy of the Font Software, to use, study, copy, merge, embed, modify,
+redistribute, and sell modified and unmodified copies of the Font
+Software, subject to the following conditions:
+
+1) Neither the Font Software nor any of its individual components, in
+Original or Modified Versions, may be sold by itself.
+
+2) Original or Modified Versions of the Font Software may be bundled,
+redistributed and/or sold with any software, provided that each copy
+that contains one or more of the Font Software has been distributed
+under this license and provided that the reserved Font Name(s) are not
+used by derivative works. The requirements of this license apply to
+those Font Software components that are covered by this license. Fonts
+that have been modified remain subject to this license and must not be
+distributed under a different license.
+
+3) Modified Versions must be prominently marked as such, and must not be
+distributed under the same name(s) as the Original Version or any
+Reserved Font Name, unless a written permission is granted by the
+Copyright Holder(s).
+
+4) The name(s) of the Copyright Holder(s) or the Author(s) of the Font
+Software shall not be used to promote, endorse or advertise any
+Modified Version, either to sell copies of the Font Software or in any
+other manner, except through a written permission from the Copyright
+Holder(s).
+
+5) The Font Software, modified or unmodified, in part or in whole, must
+be distributed using this license, and/or with compatible licensing
+terms and conditions, and must not be distributed under any other
+license.
+
+TERMINATION
+This license becomes null and void if any of the above conditions are
+not met.
+
+DISCLAIMER
+THE FONT SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO ANY WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT
+OF COPYRIGHT, PATENT, TRADEMARK, OR OTHER RIGHT. IN NO EVENT SHALL THE
+COPYRIGHT HOLDER BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
+INCLUDING ANY GENERAL, SPECIAL, INDIRECT, INCIDENTAL, OR CONSEQUENTIAL
+DAMAGES, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+FROM, OUT OF THE USE OR INABILITY TO USE THE FONT SOFTWARE OR FROM
+OTHER DEALINGS IN THE FONT SOFTWARE.
+
+---
+
+The fonts in this directory are distributed under the above license:
+
+- Font Awesome Free font files (Font Awesome 6/7 Brands/Free-Regular/Free-Solid)
+  Copyright (c) Fonticons, Inc. (fontawesome.com) — OFL 1.1 for font
+  software; the corresponding icon artwork is licensed CC BY 4.0.
+- Lato (Lato-Regular.ttf, Lato-Italic.ttf)
+  Copyright (c) 2010-2021, Łukasz Dziedzic (Google Fonts) — OFL 1.1.
+- Montserrat (Montserrat-Bold.ttf)
+  Copyright (c) 2011-2022, The Montserrat Project Authors
+  (Julieta Ulanovsky and contributors, Google Fonts) — OFL 1.1.
+- Noto Color Emoji, Noto Emoji, Noto Sans Symbols
+  Copyright (c) Google LLC / the Noto Project Authors (notofonts) — OFL 1.1.
+
+See LICENSE-NOTICE.md in this directory for the full inventory.

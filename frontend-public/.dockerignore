@@ -1,0 +1,9 @@
+node_modules
+.output
+.nuxt
+dist
+coverage
+tests
+screenshots
+.git
+*.log
