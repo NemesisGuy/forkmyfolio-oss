@@ -64,25 +64,46 @@
             </div>
           </div>
         </div>
+
+        <!-- Cover Letter Card (Phase 0.19): shown only when the owner's
+             export.coverletter.mode setting is SEPARATE (PRV-1: the file is
+             owner-only, so the tile must never appear otherwise). -->
+        <div v-if="coverLetterEnabled"
+             class="col-md-6 col-lg-4 animate-fade-in-up" style="animation-delay: 0.5s;">
+          <div class="card h-100 glass-card interactive-card-lift interactive-card-shadow-primary">
+            <div class="card-body d-flex flex-column text-center p-4">
+              <div class="mb-3"><FileSignature class="display-4 text-warning" /></div>
+              <h5 class="card-title glass-title">Cover Letter</h5>
+              <p class="card-text glass-subtitle small flex-grow-1">Your cover letter as its own
+                print-ready PDF, written in Profile &amp; Account.</p>
+              <button :disabled="isLoading" class="btn btn-warning mt-auto interactive-lift"
+                      @click="handleDownloadCoverLetter">
+                Download PDF
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import {computed, ref} from 'vue';
-import { FileText, FileCode, UserCircle } from 'lucide-vue-next';
+import {computed, onMounted, ref} from 'vue';
+import { FileText, FileCode, UserCircle, FileSignature } from 'lucide-vue-next';
 import {authService} from '@/services/authService';
 import {
+  downloadCoverLetterBySlug,
   downloadMarkdownBySlug,
   downloadPublicPortfolioBySlug,
-  downloadVCardBySlug
+  downloadVCardBySlug,
+  settingsApi
 } from '@/services/api';
 import {getFilenameFromResponse, triggerDownload} from '@/utils/downloadUtils';
 import ErrorModal from '@/components/common/modals/ErrorModal.vue';
 import LoadingModal from '@/components/common/modals/LoadingModal.vue';
 import {notificationService} from '@/services/notificationService';
-import type { User } from '@/types';
+import type { AdminSetting, User } from '@/types';
 
 const currentSlug = computed(() => (authService.user.value as User | null)?.slug);
 
@@ -91,6 +112,27 @@ const errorModalMessage = ref(''); // Use a string to control visibility
 
 // A single loading state for the full-screen modal
 const isLoading = ref(false);
+
+/**
+ * Phase 0.19: the Cover Letter tile only exists while the owner's export
+ * preference says SEPARATE. Read straight from GET /me/settings (the same
+ * source the Export Settings page persists to) — a download attempt would
+ * 404 in any other mode, so the tile is hidden instead of useless.
+ */
+const coverLetterEnabled = ref(false);
+
+onMounted(async () => {
+  try {
+    const userSettings = await settingsApi.getAll() as AdminSetting[];
+    const modeSetting = userSettings.find((s) => s.name === 'export.coverletter.mode');
+    coverLetterEnabled.value = (modeSetting?.value ?? '').trim().toUpperCase() === 'SEPARATE';
+  } catch (err: unknown) {
+    // Settings unreadable → fail safe: hide the optional tile. The other
+    // three tiles are unaffected (the core download endpoints are public).
+    console.warn('Could not read export settings; cover letter tile hidden.', err);
+    coverLetterEnabled.value = false;
+  }
+});
 
 const createDownloadHandler = (downloadFunc: (slug: string) => Promise<Response>, fileType: string, extension: string) => async () => {
   if (!currentSlug.value) return;
@@ -119,6 +161,8 @@ const createDownloadHandler = (downloadFunc: (slug: string) => Promise<Response>
 const handleDownloadPdf = createDownloadHandler(downloadPublicPortfolioBySlug, 'pdf', 'pdf');
 const handleDownloadMd = createDownloadHandler(downloadMarkdownBySlug, 'md', 'md');
 const handleDownloadVcf = createDownloadHandler(downloadVCardBySlug, 'vcf', 'vcf');
+const handleDownloadCoverLetter = createDownloadHandler(
+    (slug: string) => downloadCoverLetterBySlug(slug), 'cover letter', 'pdf');
 </script>
 
 <style scoped>

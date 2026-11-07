@@ -41,6 +41,7 @@ const serverSettings = (overrides: Record<string, string> = {}) => {
     'export.section.qualifications': 'true',
     'export.section.testimonials': 'true',
     'export.section.contact': 'true',
+    'export.coverletter.mode': 'OFF',
     ...overrides,
   };
   return Object.entries(base).map(([name, value], i) => ({
@@ -53,7 +54,7 @@ const serverSettings = (overrides: Record<string, string> = {}) => {
 
 const mountPage = async () => {
   const wrapper = mount(UserExportSettings, {
-    global: { stubs: ['SuccessModal', 'ErrorModal', 'LoadingModal'] },
+    global: { stubs: ['SuccessModal', 'ErrorModal', 'LoadingModal', 'router-link'] },
   });
   // onMounted waits a deliberate 500ms "minDelay" before releasing the
   // loading gate — advance the fake clock through it.
@@ -194,5 +195,67 @@ describe('UserExportSettings.vue (Phase 8.3)', () => {
     expect(settingsApi.update).not.toHaveBeenCalled();
     const errorModal = wrapper.findComponent({ name: 'ErrorModal' });
     expect(errorModal.props('visible')).toBe(true);
+  });
+
+  // ------------------------------------------------------------------
+  // Phase 0.19: Cover Letter card (3-mode choice)
+  // ------------------------------------------------------------------
+
+  it('shows the cover letter card defaulting to OFF', async () => {
+    const wrapper = await mountPage();
+
+    expect(wrapper.find('#coverletter-off').element.checked).toBe(true);
+    expect(wrapper.find('#coverletter-inpdf').element.checked).toBe(false);
+    expect(wrapper.find('#coverletter-separate').element.checked).toBe(false);
+    expect(wrapper.find('form button[type="submit"]').element.disabled).toBe(true);
+  });
+
+  it('loads a persisted cover letter mode from the server', async () => {
+    vi.mocked(settingsApi.getAll).mockResolvedValue(serverSettings({
+      'export.coverletter.mode': 'IN_PDF',
+    }) as never);
+    const wrapper = await mountPage();
+
+    expect(wrapper.find('#coverletter-inpdf').element.checked).toBe(true);
+    expect(wrapper.find('#coverletter-off').element.checked).toBe(false);
+  });
+
+  it('renders a malformed cover letter value as OFF (fail-closed like the backend)', async () => {
+    vi.mocked(settingsApi.getAll).mockResolvedValue(serverSettings({
+      'export.coverletter.mode': 'garbage',
+    }) as never);
+    const wrapper = await mountPage();
+
+    expect(wrapper.find('#coverletter-off').element.checked).toBe(true);
+  });
+
+  it('saving the cover letter mode sends only that change', async () => {
+    const refreshed = serverSettings({ 'export.coverletter.mode': 'SEPARATE' });
+    vi.mocked(settingsApi.update).mockResolvedValue(refreshed as never);
+    const wrapper = await mountPage();
+
+    await wrapper.find('#coverletter-separate').setValue();
+    expect(wrapper.find('form button[type="submit"]').element.disabled).toBe(false);
+
+    await wrapper.find('form button[type="submit"]').trigger('submit');
+    await flushPromises();
+
+    expect(settingsApi.update).toHaveBeenCalledTimes(1);
+    const payload = vi.mocked(settingsApi.update).mock.calls[0][0] as { uuid: string; value: string }[];
+    expect(payload).toEqual([{ uuid: 'uuid-8-export.coverletter.mode', value: 'SEPARATE' }]);
+    expect(settingsService.updateSettings).toHaveBeenCalledWith(refreshed);
+  });
+
+  it('reset restores the original cover letter mode and re-disables saving', async () => {
+    const wrapper = await mountPage();
+
+    await wrapper.find('#coverletter-separate').setValue();
+    expect(wrapper.find('form button[type="submit"]').element.disabled).toBe(false);
+
+    await wrapper.find('button[type="button"].btn-secondary').trigger('click');
+
+    expect(wrapper.find('#coverletter-off').element.checked).toBe(true);
+    expect(wrapper.find('form button[type="submit"]').element.disabled).toBe(true);
+    expect(settingsApi.update).not.toHaveBeenCalled();
   });
 });

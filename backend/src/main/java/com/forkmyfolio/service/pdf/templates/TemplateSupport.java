@@ -540,9 +540,76 @@ public final class TemplateSupport {
         }
     }
 
+    // ------------------------------------------------------------------
+    // Phase 0.19: cover letter blocks (shared by the page appended to the
+    // resume PDF and the standalone cover letter download)
+    // ------------------------------------------------------------------
+
+    /**
+     * Replaces the {@code {{company}}} / {@code {{role}}} placeholders in a
+     * cover letter template. Null/blank values leave the tokens untouched:
+     * a partially known recipient must never produce e.g. "Dear  team,".
+     * Case-insensitive uppercase aliases ({@code {{COMPANY}}}) are also
+     * replaced.
+     */
+    public static String applyCoverLetterVariables(String text, String company, String role) {
+        if (text == null) {
+            return "";
+        }
+        String result = text;
+        if (company != null && !company.isBlank()) {
+            result = result.replace("{{company}}", company).replace("{{COMPANY}}", company);
+        }
+        if (role != null && !role.isBlank()) {
+            result = result.replace("{{role}}", role).replace("{{ROLE}}", role);
+        }
+        return result;
+    }
+
+    /**
+     * Full cover letter page: vertical breathing room, the standard header
+     * (name, headline, contact line — honouring {@code includeContact}),
+     * a "Cover Letter" heading and the owner's template text split into
+     * blank-line paragraphs with single newlines kept as line breaks.
+     *
+     * <p>
+     * Content is side-indented by ~7% of the page width so the page reads
+     * correctly even inside a resume template whose own document margins
+     * are zero (the "modern" template's full-bleed layout). Does NOT close
+     * the document — the caller controls the lifecycle.
+     */
+    public static void renderCoverLetterPage(Document doc, Theme theme, PortfolioData data,
+            String company, String role) throws DocumentException {
+        Paragraph spacer = new Paragraph(" ");
+        spacer.setLeading(56f);
+        doc.add(spacer);
+
+        renderHeader(doc, theme, data);
+
+        String text = applyCoverLetterVariables(data.coverLetterTemplate(), company, role).trim();
+        if (text.isEmpty()) {
+            return;
+        }
+
+        renderSectionHeader(doc, theme, "Cover Letter");
+
+        float indent = Math.max(24f, doc.getPageSize().getWidth() * 0.07f);
+        for (String rawParagraph : text.split("\\r?\\n\\s*\\r?\\n")) {
+            String paragraphText = rawParagraph.trim();
+            if (paragraphText.isEmpty()) {
+                continue;
+            }
+            Paragraph paragraph = new Paragraph(paragraphText, font(theme.bodyFont(), 10, theme.textColor()));
+            paragraph.setIndentationLeft(indent);
+            paragraph.setIndentationRight(indent);
+            paragraph.setLeading(0, theme.bodyLeading());
+            paragraph.setSpacingAfter(10);
+            doc.add(paragraph);
+        }
+    }
+
     /** Footer block: generator credit line. */
-    public static void renderFooter(Document doc, Theme theme) throws DocumentException {
-        Paragraph rule = new Paragraph(0);
+    public static void renderFooter(Document doc, Theme theme) throws DocumentException {        Paragraph rule = new Paragraph(0);
         rule.add(new Chunk(new LineSeparator(0.5f, 100, theme.subtleColor(), Element.ALIGN_CENTER, 0)));
         rule.setSpacingBefore(16);
         doc.add(rule);

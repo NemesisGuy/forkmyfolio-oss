@@ -1,30 +1,32 @@
 <template>
   <LoadingModal :visible="isLoading"/>
 
-  <div v-show="!isLoading" class="user-export-settings-page py-5">
+  <div v-show="!isLoading" class="user-export-settings-page py-5 flex-grow-1">
     <div class="container">
       <div class="row justify-content-center">
         <div class="col-lg-10 col-xl-8">
-          <h1 class="display-5 mb-4">Export Settings</h1>
-          <p class="lead text-muted mb-2">
+          <h1 class="display-5 mb-4 glass-text">Export Settings</h1>
+          <p class="lead glass-subtitle mb-5">
             Choose what goes into the PDF and Markdown files you download of your
             <strong>own</strong> portfolio.
           </p>
-          <p class="text-muted small mb-5">
-            <Info class="me-1" aria-hidden="true"/>
-            Public visitors always receive the public version of your portfolio — these
-            preferences only apply to your own downloads while you are logged in.
-          </p>
 
           <!-- Error State -->
-          <div v-if="error" class="alert alert-danger">
+          <div v-if="error" class="alert alert-danger glass-card-dark">
             <h4 class="alert-heading"><Ban class="me-1" aria-hidden="true"/> Error</h4>
             <p>Could not load your export settings. Please try again later.</p>
             <pre class="small">{{ error.message }}</pre>
           </div>
 
           <!-- Settings Form -->
-          <form v-else @submit.prevent="handleSaveSettings">
+          <form v-else class="animate-fade-in-up" @submit.prevent="handleSaveSettings">
+            <!-- Privacy note (mirrors the Display Settings page's phrasing) -->
+            <p class="text-muted small mb-4">
+              <Info class="me-1" aria-hidden="true"/>
+              Public visitors always receive the public version of your portfolio — these
+              preferences only apply to your own downloads while you are logged in.
+            </p>
+
             <!-- Export Mode -->
             <div class="card glass-card shadow-sm mb-4">
               <div class="card-header">
@@ -70,6 +72,83 @@
                     </p>
                   </label>
                 </div>
+              </div>
+            </div>
+
+            <!-- Cover Letter (Phase 0.19) -->
+            <div class="card glass-card shadow-sm mb-4">
+              <div class="card-header">
+                <h5 class="mb-0">
+                  <FileSignature class="me-1" aria-hidden="true"/> Cover Letter
+                </h5>
+              </div>
+              <div class="card-body p-4">
+                <div class="form-check mb-3">
+                  <input
+                    id="coverletter-off"
+                    v-model="coverLetterMode"
+                    :disabled="isSaving"
+                    class="form-check-input"
+                    name="coverLetterMode"
+                    type="radio"
+                    value="OFF"
+                    @change="isDirty = true"
+                  >
+                  <label class="form-check-label" for="coverletter-off">
+                    <strong>Off</strong>
+                    <p class="form-text text-muted mt-0">
+                      The cover letter is never exported. This is the default.
+                    </p>
+                  </label>
+                </div>
+                <div class="form-check mb-3">
+                  <input
+                    id="coverletter-inpdf"
+                    v-model="coverLetterMode"
+                    :disabled="isSaving"
+                    class="form-check-input"
+                    name="coverLetterMode"
+                    type="radio"
+                    value="IN_PDF"
+                    @change="isDirty = true"
+                  >
+                  <label class="form-check-label" for="coverletter-inpdf">
+                    <strong>Inside resume PDF</strong>
+                    <p class="form-text text-muted mt-0">
+                      Your own resume download gains an appended cover letter page (and your
+                      Markdown a Cover Letter section). Public visitors' downloads are never
+                      affected.
+                    </p>
+                  </label>
+                </div>
+                <div class="form-check">
+                  <input
+                    id="coverletter-separate"
+                    v-model="coverLetterMode"
+                    :disabled="isSaving"
+                    class="form-check-input"
+                    name="coverLetterMode"
+                    type="radio"
+                    value="SEPARATE"
+                    @change="isDirty = true"
+                  >
+                  <label class="form-check-label" for="coverletter-separate">
+                    <strong>Separate download tile</strong>
+                    <p class="form-text text-muted mt-0">
+                      Your Data &amp; Exports page gains a Cover Letter tile that downloads the
+                      letter as its own PDF. Your resume PDF and Markdown stay untouched.
+                    </p>
+                  </label>
+                </div>
+                <p class="text-muted small mb-0 mt-3">
+                  The letter text lives in
+                  <router-link :to="{ name: 'profile', params: { slug: profileSlug } }">
+                    Profile &amp; Account
+                  </router-link>
+                  → Cover Letter Template. Use <code v-pre>{{company}}</code> and
+                  <code v-pre>{{role}}</code> placeholders where recipient-specific details
+                  belong.
+                </p>
               </div>
             </div>
 
@@ -146,15 +225,16 @@
 </template>
 
 <script setup lang="ts">
-import {nextTick, onMounted, ref} from 'vue';
-import { Ban, Info } from 'lucide-vue-next';
+import {computed, nextTick, onMounted, ref} from 'vue';
+import { Ban, Info, FileSignature } from 'lucide-vue-next';
 import {settingsApi} from '@/services/api/user.api.js';
 import {settingsService} from '@/services/settingsService.js';
 import {ApiError} from '@/services/api/index.js';
+import {authService} from '@/services/authService';
 import SuccessModal from '@/components/common/modals/SuccessModal.vue';
 import ErrorModal from '@/components/common/modals/ErrorModal.vue';
 import LoadingModal from '@/components/common/modals/LoadingModal.vue';
-import type { AdminSetting } from '@/types';
+import type { AdminSetting, User } from '@/types';
 
 /**
  * Phase 8.3 — Export Settings CMS.
@@ -165,13 +245,18 @@ import type { AdminSetting } from '@/types';
  * enabled), so a user who has never configured anything sees the defaults
  * here and their exports behave exactly as before.
  *
- * PRIVACY NOTE: these preferences only ever affect OWNER exports. The
- * backend ignores them for PUBLIC downloads (PRV-1), which the page states
+ * Phase 0.19 — Cover Letter card: a 3-mode choice (OFF / inside resume PDF /
+ * separate download tile) persisted as `export.coverletter.mode`, written in
+ * Profile & Account → Cover Letter Template. OFF is the safe default and
+ * PUBLIC exports never include the letter (PRV-1), which this page states
  * explicitly so the toggle semantics are never misunderstood.
  */
 
 const MODE_SETTING = 'export.mode';
 const SECTION_PREFIX = 'export.section.';
+const COVER_LETTER_SETTING = 'export.coverletter.mode';
+
+const profileSlug = computed(() => (authService.user.value as User | null)?.slug ?? '');
 
 /** Section metadata: UserSetting name suffix, label and explanation. */
 const sections = ref([
@@ -185,6 +270,10 @@ const sections = ref([
 ]);
 
 const selectedMode = ref('FULL');
+// Phase 0.19: the 3-mode cover letter choice. OFF mirrors the backend's
+// fail-closed default; a malformed server value also renders as OFF.
+const VALID_COVER_LETTER_MODES = ['OFF', 'IN_PDF', 'SEPARATE'] as const;
+const coverLetterMode = ref('OFF');
 const isDirty = ref(false);
 
 const isLoading = ref(true);
@@ -199,6 +288,7 @@ const errorMessage = ref('');
 // the save handler only sends settings whose value actually changed.
 const serverSettings = ref<Map<string, AdminSetting>>(new Map());
 const originalMode = ref('FULL');
+const originalCoverLetterMode = ref('OFF');
 const originalSectionValues = ref<Map<string, boolean>>(new Map());
 
 // Sleep helper to guarantee minimum modal visible time, preventing UI flicker.
@@ -215,7 +305,8 @@ onMounted(async () => {
     // uuid) is available for saving.
     const byName = new Map<string, AdminSetting>();
     for (const setting of userSettings) {
-      if (setting.name === MODE_SETTING || setting.name.startsWith(SECTION_PREFIX)) {
+      if (setting.name === MODE_SETTING || setting.name.startsWith(SECTION_PREFIX)
+          || setting.name === COVER_LETTER_SETTING) {
         byName.set(setting.name, setting);
       }
     }
@@ -226,6 +317,14 @@ onMounted(async () => {
     const serverMode = (modeSetting?.value ?? 'FULL').toUpperCase();
     selectedMode.value = serverMode === 'BRIEF' ? 'BRIEF' : 'FULL';
     originalMode.value = selectedMode.value;
+
+    // Cover letter: server value if present and valid, otherwise OFF
+    // (fail-closed — mirrors the backend's malformed-value handling).
+    const coverLetterSetting = byName.get(COVER_LETTER_SETTING);
+    const serverCoverLetterMode = (coverLetterSetting?.value ?? 'OFF').trim().toUpperCase();
+    coverLetterMode.value = (VALID_COVER_LETTER_MODES as readonly string[]).includes(serverCoverLetterMode)
+        ? serverCoverLetterMode : 'OFF';
+    originalCoverLetterMode.value = coverLetterMode.value;
 
     // Sections: server value ("false" disables; anything else enables —
     // mirroring the backend's forgiving parser), otherwise default enabled.
@@ -271,6 +370,14 @@ const handleSaveSettings = async () => {
     if (selectedMode.value !== originalMode.value) {
       payload.push({uuid: modeSetting.uuid, value: selectedMode.value});
     }
+    // Phase 0.19: the cover letter mode rides exactly the same mechanism.
+    if (coverLetterMode.value !== originalCoverLetterMode.value) {
+      const setting = serverSettings.value.get(COVER_LETTER_SETTING);
+      if (!setting?.uuid) {
+        throw new Error("The cover letter setting was not found for your account.");
+      }
+      payload.push({uuid: setting.uuid, value: coverLetterMode.value});
+    }
     for (const section of sections.value) {
       if (section.enabled !== originalSectionValues.value.get(section.key)) {
         const setting = serverSettings.value.get(SECTION_PREFIX + section.key);
@@ -309,6 +416,14 @@ const handleSaveSettings = async () => {
         originalSectionValues.value.set(section.key, section.enabled);
       }
     }
+    const refreshedCoverLetter = refreshedByName.get(COVER_LETTER_SETTING);
+    if (refreshedCoverLetter) {
+      serverSettings.value.set(COVER_LETTER_SETTING, refreshedCoverLetter);
+      const serverCoverLetterMode = (refreshedCoverLetter.value ?? 'OFF').trim().toUpperCase();
+      coverLetterMode.value = (VALID_COVER_LETTER_MODES as readonly string[]).includes(serverCoverLetterMode)
+          ? serverCoverLetterMode : 'OFF';
+      originalCoverLetterMode.value = coverLetterMode.value;
+    }
 
     isDirty.value = false;
     showSuccessModal.value = true;
@@ -324,6 +439,7 @@ const handleSaveSettings = async () => {
 /** Resets the form back to the values as loaded from the server. */
 const resetChanges = () => {
   selectedMode.value = originalMode.value;
+  coverLetterMode.value = originalCoverLetterMode.value;
   for (const section of sections.value) {
     section.enabled = originalSectionValues.value.get(section.key) ?? true;
   }
@@ -338,5 +454,34 @@ const resetChanges = () => {
 
 .form-text {
   font-size: 0.9rem;
+}
+
+/* Display Settings page parity: glass list rows + large switches */
+.list-group-item {
+  background-color: transparent;
+  border: none;
+  border-bottom: 1px solid var(--glass-border);
+  padding-top: 1rem;
+  padding-bottom: 1rem;
+  color: var(--glass-text);
+}
+
+.list-group-item:last-child {
+  border-bottom: none;
+}
+
+.list-group-item .text-muted {
+  color: var(--glass-text-secondary) !important;
+}
+
+.form-check-input {
+  width: 2.2em;
+  height: 1.2em;
+  cursor: pointer;
+}
+
+.card-header {
+  background-color: rgba(var(--bs-body-color-rgb), 0.05);
+  border-bottom: 1px solid var(--glass-border-hover);
 }
 </style>

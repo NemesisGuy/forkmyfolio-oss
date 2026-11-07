@@ -129,6 +129,18 @@ public class MarkdownGenerationService {
             md.append("---\n\n");
         }
 
+        // --- Cover Letter (Phase 0.19) ---
+        // Owner preference only: rendered when the cover letter mode is
+        // IN_PDF and the owner wrote text. PUBLIC exports always carry mode
+        // OFF (ExportContentService defaults), so visitors can never
+        // receive it. No recipient context exists in the Markdown pipeline,
+        // so {{company}}/{{role}} placeholders are emitted as written —
+        // the owner can refine them in the Markdown file itself.
+        if (data.includeCoverLetter()) {
+            md.append("## ✉️ Cover Letter\n\n");
+            md.append(data.coverLetterTemplate().trim()).append("\n\n---\n\n");
+        }
+
         return md.toString();
     }
 

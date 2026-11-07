@@ -1,5 +1,6 @@
 package com.forkmyfolio.service.pdf;
 
+import com.forkmyfolio.model.enums.CoverLetterExportMode;
 import com.forkmyfolio.model.enums.ExportMode;
 import org.junit.jupiter.api.Test;
 
@@ -32,6 +33,66 @@ public class ExportPreferencesTest {
         assertThat(defaults.qualifications()).isTrue();
         assertThat(defaults.testimonials()).isTrue();
         assertThat(defaults.contact()).isTrue();
+        // Phase 0.19: fresh/existing accounts never export a cover letter
+        assertThat(defaults.coverLetterMode()).isEqualTo(CoverLetterExportMode.OFF);
+    }
+
+    // ------------------------------------------------------------------
+    // Phase 0.19: cover letter mode parsing (FAIL-CLOSED)
+    // ------------------------------------------------------------------
+
+    @Test
+    void coverLetterMode_valuesParse() {
+        Map<String, String> overrides = new HashMap<>();
+        overrides.put("export.coverletter.mode", "IN_PDF");
+        assertThat(ExportPreferences.fromUserSettings(overrides).coverLetterMode())
+                .isEqualTo(CoverLetterExportMode.IN_PDF);
+
+        overrides.put("export.coverletter.mode", "SEPARATE");
+        assertThat(ExportPreferences.fromUserSettings(overrides).coverLetterMode())
+                .isEqualTo(CoverLetterExportMode.SEPARATE);
+
+        overrides.put("export.coverletter.mode", "OFF");
+        assertThat(ExportPreferences.fromUserSettings(overrides).coverLetterMode())
+                .isEqualTo(CoverLetterExportMode.OFF);
+    }
+
+    @Test
+    void coverLetterMode_parsingIsCaseInsensitiveAndSpacerTolerant() {
+        assertThat(ExportPreferences.fromUserSettings(Map.of("export.coverletter.mode", "separate")).coverLetterMode())
+                .isEqualTo(CoverLetterExportMode.SEPARATE);
+        assertThat(ExportPreferences.fromUserSettings(Map.of("export.coverletter.mode", "in pdf")).coverLetterMode())
+                .isEqualTo(CoverLetterExportMode.IN_PDF);
+        assertThat(ExportPreferences.fromUserSettings(Map.of("export.coverletter.mode", "IN-PDF")).coverLetterMode())
+                .isEqualTo(CoverLetterExportMode.IN_PDF);
+        assertThat(ExportPreferences.fromUserSettings(Map.of("export.coverletter.mode", " off ")).coverLetterMode())
+                .isEqualTo(CoverLetterExportMode.OFF);
+    }
+
+    @Test
+    void coverLetterMode_missingOrMalformed_failsClosedToOff() {
+        // Missing value
+        assertThat(ExportPreferences.fromUserSettings(Map.of("export.mode", "FULL")).coverLetterMode())
+                .isEqualTo(CoverLetterExportMode.OFF);
+        // Unlike the section toggles (fail-open, "never lose content"),
+        // a malformed cover letter value must never silently EXPOSE one.
+        for (String malformed : new String[]{"", "maybe", "ENABLED", "TRUE", "download", "garbage"}) {
+            assertThat(ExportPreferences.fromUserSettings(Map.of("export.coverletter.mode", malformed)).coverLetterMode())
+                    .as("value '%s' must resolve OFF", malformed)
+                    .isEqualTo(CoverLetterExportMode.OFF);
+        }
+    }
+
+    @Test
+    void coverLetterMode_doesNotAffectSectionTogglesOrMode() {
+        Map<String, String> overrides = Map.of(
+                "export.coverletter.mode", "SEPARATE",
+                "export.section.skills", "false");
+        ExportPreferences prefs = ExportPreferences.fromUserSettings(overrides);
+        assertThat(prefs.coverLetterMode()).isEqualTo(CoverLetterExportMode.SEPARATE);
+        assertThat(prefs.mode()).isEqualTo(ExportMode.FULL);
+        assertThat(prefs.skills()).isFalse();
+        assertThat(prefs.contact()).isTrue();
     }
 
     @Test

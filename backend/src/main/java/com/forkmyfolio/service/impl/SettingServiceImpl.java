@@ -87,6 +87,10 @@ public class SettingServiceImpl implements SettingService {
         createSettingIfNotExists("export.section.qualifications", "true", "Include the Qualifications / Education section in your own exports.");
         createSettingIfNotExists("export.section.testimonials", "true", "Include the Testimonials section in your own exports.");
         createSettingIfNotExists("export.section.contact", "true", "Include the contact details block in your own exports.");
+        // Phase 0.19: cover letter export behaviour, OFF by default so every
+        // existing export pipeline is byte-for-byte unchanged until the
+        // owner opts in via this setting.
+        createSettingIfNotExists("export.coverletter.mode", "OFF", "Cover letter export for your own downloads: OFF (never exported), IN_PDF (append a cover letter page to your resume PDF and a section to your Markdown) or SEPARATE (download the cover letter as its own PDF from Data & Exports).");
         log.info("Default settings initialization complete.");
     }
 

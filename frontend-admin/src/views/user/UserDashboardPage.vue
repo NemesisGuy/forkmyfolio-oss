@@ -193,6 +193,22 @@
             </div>
           </div>
 
+          <!-- Export Settings (Phase 0.19: surfaced on the dashboard like Display/PDF Settings) -->
+          <div class="col-md-6 col-lg-4 animate-fade-in-up" style="animation-delay: 1.25s;">
+            <div class="card h-100 glass-card interactive-card-lift interactive-card-shadow-primary">
+              <div class="card-body d-flex flex-column">
+                <h5 class="card-title"><CloudDownload class="me-2" />Export Settings
+                </h5>
+                <p class="card-text small text-muted">Choose what goes into the PDF and Markdown
+                  files you download — including the cover letter export.</p>
+                <router-link :to="{ name: 'export-settings', params: { slug: user.slug } }"
+                             class="btn btn-outline-primary mt-auto align-self-start">
+                  Manage Exports
+                </router-link>
+              </div>
+            </div>
+          </div>
+
           <!-- Guest Passes -->
           <div class="col-md-6 col-lg-4 animate-fade-in-up" style="animation-delay: 1.3s;">
             <div class="card h-100 glass-card interactive-card-lift interactive-card-shadow-primary border-primary-subtle">

@@ -1,6 +1,7 @@
 package com.forkmyfolio.service.pdf;
 
 import com.forkmyfolio.model.*;
+import com.forkmyfolio.model.enums.CoverLetterExportMode;
 import com.forkmyfolio.model.enums.ExportMode;
 
 import java.util.List;
@@ -37,6 +38,13 @@ import java.util.List;
  * </ul>
  * The legacy constructors are retained for source compatibility with
  * existing tests/templates; they delegate with FULL/all-enabled defaults.
+ *
+ * <p>
+ * Phase 0.19 (cover letter export): the record additionally carries the
+ * owner's cover letter raw text ({@code coverLetterTemplate}) and the
+ * resolved behaviour ({@code coverLetterMode}). {@link #includeCoverLetter()}
+ * is the single gate every renderer (resume-PDF appended page + Markdown
+ * section) checks, so the IN_PDF path can never drift between formats.
  */
 public record PortfolioData(
         PortfolioProfile profile,
@@ -49,8 +57,41 @@ public record PortfolioData(
         boolean includeSummary,
         boolean includeContact,
         ExportMode exportMode,
-        String profileImageUrl
+        String profileImageUrl,
+        String coverLetterTemplate,
+        CoverLetterExportMode coverLetterMode
 ) {
+
+    /**
+     * Phase 0.19: the one gate for rendering a cover letter as part of an
+     * IN_PDF export — true only when the mode is IN_PDF <em>and</em> the
+     * owner actually wrote text. Standalone (SEPARATE) downloads use their
+     * own gate so the two features stay independent.
+     */
+    public boolean includeCoverLetter() {
+        return coverLetterMode == CoverLetterExportMode.IN_PDF
+                && coverLetterTemplate != null && !coverLetterTemplate.isBlank();
+    }
+
+    /**
+     * Legacy ten-field constructor (pre-0.19 shape). Derives the 0.19
+     * fields with safe defaults: no cover letter text, mode OFF.
+     */
+    public PortfolioData(PortfolioProfile profile,
+            List<Experience> experiences,
+            List<Qualification> qualifications,
+            List<Project> projects,
+            List<Skill> skills,
+            List<Testimonial> testimonials,
+            String contactEmail,
+            boolean includeSummary,
+            boolean includeContact,
+            ExportMode exportMode,
+            String profileImageUrl) {
+        this(profile, experiences, qualifications, projects, skills, testimonials,
+                contactEmail, includeSummary, includeContact, exportMode, profileImageUrl,
+                "", CoverLetterExportMode.OFF);
+    }
 
     /**
      * Legacy eight-field constructor (pre-8.3 shape). Derives the 8.3

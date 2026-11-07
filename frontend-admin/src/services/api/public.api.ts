@@ -124,6 +124,23 @@ export const downloadVCardBySlug = (slug: string): Promise<Response> => {
   }, false) as unknown as Promise<Response>;
 };
 
+/**
+ * Downloads the owner's cover letter as its own PDF (owner-only; Phase 0.19).
+ * The backend answers 404 unless the owner enabled the SEPARATE export mode
+ * and wrote cover letter text. Unlike the other download helpers this MUST
+ * send the Authorization header — ownership decides between 200 and 404.
+ */
+export const downloadCoverLetterBySlug = (slug: string, opts: { company?: string; role?: string } = {}): Promise<Response> => {
+  const params = new URLSearchParams();
+  if (opts.company) params.set('company', opts.company);
+  if (opts.role) params.set('role', opts.role);
+  const qs = params.toString();
+  return fetchWithAuth<Response>(`/portfolios/${slug}/cover-letter${qs ? `?${qs}` : ''}`, {
+    method: 'GET',
+    responseType: 'raw'
+  }, true) as unknown as Promise<Response>;
+};
+
 export type FlattenedProfile = User & Profile & Record<string, unknown>;
 
 /**
@@ -187,4 +204,5 @@ export const publicApi = {
   downloadPublicPortfolioBySlug,
   downloadMarkdownBySlug,
   downloadVCardBySlug,
+  downloadCoverLetterBySlug,
 };

@@ -192,7 +192,13 @@ public class ExportContentService {
                 includeSummary,
                 prefs.contact(),
                 prefs.mode(),
-                owner.getProfileImageUrl());
+                owner.getProfileImageUrl(),
+                // Phase 0.19: the cover letter is owner-personal data. PUBLIC
+                // exports resolve to defaults() whose coverLetterMode is OFF,
+                // so visitors can never receive it (PRV-1); OWNER exports
+                // honour the owner's own export.coverletter.mode setting.
+                profile.getCoverLetterTemplate(),
+                prefs.coverLetterMode());
     }
 
     /**
@@ -207,7 +213,8 @@ public class ExportContentService {
         Map<String, String> overrides = userSettingRepository.findByUser(owner).stream()
                 .filter(setting -> setting.getName() != null
                         && (ExportPreferences.MODE_SETTING.equals(setting.getName())
-                                || setting.getName().startsWith(ExportPreferences.SECTION_PREFIX)))
+                                || setting.getName().startsWith(ExportPreferences.SECTION_PREFIX)
+                                || ExportPreferences.COVER_LETTER_MODE_SETTING.equals(setting.getName())))
                 .collect(Collectors.toMap(UserSetting::getName, UserSetting::getValue));
         return ExportPreferences.fromUserSettings(overrides);
     }

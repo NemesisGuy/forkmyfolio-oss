@@ -1,5 +1,6 @@
 package com.forkmyfolio.service.pdf;
 
+import com.forkmyfolio.model.enums.CoverLetterExportMode;
 import com.forkmyfolio.model.enums.ExportMode;
 
 import java.util.Map;
@@ -18,6 +19,11 @@ import java.util.Set;
  *   <li>value {@code false} (case-insensitive) ⇒ section disabled;</li>
  *   <li>any other value ({@code true}, {@code 1}, garbage) ⇒ enabled;</li>
  *   <li>unparseable mode ⇒ {@link ExportMode#FULL}.</li>
+ *   <li>Phase 0.19: the cover letter mode is parsed FAIL-CLOSED — missing,
+ *       blank or unparseable values ⇒ {@link CoverLetterExportMode#OFF}.
+ *       Unlike the section toggles (where a malformed value must never
+ *       silently LOSE content), a malformed cover letter value must never
+ *       silently EXPOSE one.</li>
  * </ul>
  *
  * <p>
@@ -37,7 +43,8 @@ public record ExportPreferences(
         boolean skills,
         boolean qualifications,
         boolean testimonials,
-        boolean contact) {
+        boolean contact,
+        CoverLetterExportMode coverLetterMode) {
 
     /** UserSetting name carrying the export mode ({@code FULL}|{@code BRIEF}). */
     public static final String MODE_SETTING = "export.mode";
@@ -45,14 +52,21 @@ public record ExportPreferences(
     /** UserSetting name prefix for the per-section toggles. */
     public static final String SECTION_PREFIX = "export.section.";
 
+    /**
+     * Phase 0.19: UserSetting name carrying the cover letter export
+     * behaviour ({@code OFF}|{@code IN_PDF}|{@code SEPARATE}).
+     */
+    public static final String COVER_LETTER_MODE_SETTING = "export.coverletter.mode";
+
     /** Section keys, in canonical render order. */
     public static final Set<String> SECTION_KEYS = Set.of(
             "summary", "experience", "projects", "skills",
             "qualifications", "testimonials", "contact");
 
-    /** The safe default: full portfolio, every section enabled. */
+    /** The safe default: full portfolio, every section enabled, cover letter OFF. */
     public static ExportPreferences defaults() {
-        return new ExportPreferences(ExportMode.FULL, true, true, true, true, true, true, true);
+        return new ExportPreferences(ExportMode.FULL, true, true, true, true, true, true, true,
+                CoverLetterExportMode.OFF);
     }
 
     /**
@@ -73,7 +87,8 @@ public record ExportPreferences(
                 parseToggle(overrides.get(SECTION_PREFIX + "skills")),
                 parseToggle(overrides.get(SECTION_PREFIX + "qualifications")),
                 parseToggle(overrides.get(SECTION_PREFIX + "testimonials")),
-                parseToggle(overrides.get(SECTION_PREFIX + "contact")));
+                parseToggle(overrides.get(SECTION_PREFIX + "contact")),
+                parseCoverLetterMode(overrides.get(COVER_LETTER_MODE_SETTING)));
     }
 
     private static ExportMode parseMode(String raw) {
@@ -96,5 +111,27 @@ public record ExportPreferences(
      */
     private static boolean parseToggle(String raw) {
         return !"false".equalsIgnoreCase(raw == null ? "" : raw.trim());
+    }
+
+    /**
+     * Phase 0.19: cover letter mode parsing is FAIL-CLOSED — missing,
+     * blank, malformed or unknown values all resolve to
+     * {@link CoverLetterExportMode#OFF}. The stored value is case- and
+     * spacer-insensitive ({@code "separate"}, {@code "in pdf"},
+     * {@code "in-pdf"} and {@code "IN_PDF"} all resolve to IN_PDF).
+     */
+    private static CoverLetterExportMode parseCoverLetterMode(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return CoverLetterExportMode.OFF;
+        }
+        String normalized = raw.trim().toUpperCase().replace('-', '_').replace(' ', '_');
+        try {
+            return CoverLetterExportMode.valueOf(normalized);
+        } catch (IllegalArgumentException malformed) {
+            // Fail-closed: anything unrecognised stays OFF — a malformed
+            // value must never expose content (the opposite tradeoff from
+            // the section toggles, which fail open to never lose content).
+            return CoverLetterExportMode.OFF;
+        }
     }
 }

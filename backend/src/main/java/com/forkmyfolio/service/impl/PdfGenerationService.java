@@ -2,6 +2,7 @@ package com.forkmyfolio.service.impl;
 
 import com.forkmyfolio.exception.ResourceNotFoundException;
 import com.forkmyfolio.model.*;
+import com.forkmyfolio.model.enums.CoverLetterExportMode;
 import com.forkmyfolio.model.enums.ExportVisibility;
 import com.forkmyfolio.repository.SettingRepository;
 import com.forkmyfolio.service.UserService;
@@ -135,7 +136,32 @@ public class PdfGenerationService {
      */
     @Transactional(readOnly = true)
     public PdfFile generatePortfolioPdf(User user, String templateName, ExportVisibility visibility) {
-        // The user object passed in is detached. We must fetch a fresh, fully-initialized
+        // Phase 0.19: the original three-argument signature is retained for
+        // source compatibility (tests, callers); the cover letter in that
+        // path is never substituted (no recipient context available).
+        return generatePortfolioPdf(user, templateName, visibility, null, null);
+    }
+
+    /**
+     * Generates a portfolio PDF for a specific user using a specified template.
+     *
+     * @param user         The User entity for whom the portfolio is being generated.
+     * @param templateName The name of the template to use (e.g., "modern").
+     * @param visibility   Phase 8 (PRV-1): the visibility contract for content
+     *                     selection — PUBLIC mirrors the public portfolio pages'
+     *                     filters (guests and non-owner requesters), OWNER includes
+     *                     the owner's own non-public content. Resolved by the
+     *                     controller; never derived here.
+     * @param company      Phase 0.19: optional recipient for the cover letter's
+     *                     {@code {{company}}} placeholders (only consulted when the
+     *                     cover letter mode is IN_PDF). Null/blank leaves them.
+     * @param role         Phase 0.19: optional recipient for the {@code {{role}}}
+     *                     placeholders, same rules as {@code company}.
+     * @return A PdfFile record containing the byte content and suggested filename.
+     */
+    @Transactional(readOnly = true)
+    public PdfFile generatePortfolioPdf(User user, String templateName, ExportVisibility visibility,
+            String company, String role) {        // The user object passed in is detached. We must fetch a fresh, fully-initialized
         // user within this transaction to avoid LazyInitializationException on collections like 'userSettings'.
         User freshUser = userService.findBySlugWithAllPortfolioData(user.getSlug())
                 .orElseThrow(() -> new ResourceNotFoundException("User not found with slug: " + user.getSlug()));
@@ -196,6 +222,15 @@ public class PdfGenerationService {
             document.open();
             PdfContext ctx = new PdfContext();
             template.generate(document, ctx, portfolioData);
+            // Phase 0.19: the owner may append their cover letter as a final
+            // page of their own resume download. PUBLIC exports always carry
+            // coverLetterMode OFF (PortfolioData prises it from defaults()),
+            // so visitors' downloads are byte-for-byte untouched.
+            if (visibility == ExportVisibility.OWNER && portfolioData.includeCoverLetter()) {
+                document.newPage();
+                TemplateSupport.renderCoverLetterPage(document, coverLetterTheme(ctx),
+                        portfolioData, company, role);
+            }
         } catch (IOException | DocumentException e) {
             log.error("Failed to load fonts or other resources for PDF generation. Aborting.", e);
             throw new RuntimeException("Failed to generate PDF due to a resource loading issue.", e);
@@ -210,6 +245,81 @@ public class PdfGenerationService {
                 LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE)
         );
         return new PdfFile(baos.toByteArray(), filename);
+    }
+
+    /**
+     * Phase 0.19: generates the owner's standalone cover letter PDF, used by
+     * the {@code /{slug}/cover-letter} owner-only download endpoint.
+     *
+     * <p>
+     * PRV-1: the export data is ALWAYS built under
+     * {@link ExportVisibility#OWNER} (only the authenticated owner can reach
+     * the endpoint; the controller enforces this). The download exists only
+     * when the owner's cover letter mode is {@code SEPARATE} AND they have
+     * actually written text — any other state answers an indistinguishable
+     * 404 so configuration is never enumerable.
+     *
+     * <p>
+     * Rendered through the SAME {@link TemplateSupport#renderCoverLetterPage}
+     * block as the resume-appended page, with a neutral professional
+     * theme derived from the shared {@link PdfContext} fonts.
+     *
+     * @param user    the cover letter's owner (resolved identity; the
+     *                controller already verified ownership).
+     * @param company optional {@code {{company}}} replacement.
+     * @param role    optional {@code {{role}}} replacement.
+     * @return a PdfFile carrying the PDF bytes and a cover-letter filename.
+     * @throws ResourceNotFoundException when the mode/text gate fails.
+     */
+    @Transactional(readOnly = true)
+    public PdfFile generateCoverLetterPdf(User user, String company, String role) {
+        User freshUser = userService.findBySlugWithAllPortfolioData(user.getSlug())
+                .orElseThrow(() -> new ResourceNotFoundException("User not found with slug: " + user.getSlug()));
+
+        PortfolioData data = exportContentService.buildExportData(freshUser, ExportVisibility.OWNER);
+        if (data.coverLetterMode() != CoverLetterExportMode.SEPARATE
+                || data.coverLetterTemplate() == null || data.coverLetterTemplate().isBlank()) {
+            throw new ResourceNotFoundException("No cover letter is available for this portfolio.");
+        }
+
+        log.info("Generating standalone cover letter PDF for user: {}", freshUser.getEmail());
+
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        Document document = new Document(PageSize.A4, 40, 40, 50, 40);
+        try {
+            PdfWriter.getInstance(document, baos);
+            document.open();
+            TemplateSupport.renderCoverLetterPage(document, coverLetterTheme(new PdfContext()),
+                    data, company, role);
+        } catch (IOException | DocumentException e) {
+            log.error("Failed to generate the cover letter PDF. Aborting.", e);
+            throw new RuntimeException("Failed to generate the cover letter PDF due to a resource loading issue.", e);
+        } finally {
+            document.close();
+        }
+
+        String filename = String.format("%s%s-CoverLetter-%s.pdf",
+                freshUser.getFirstName(),
+                freshUser.getLastName(),
+                LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE)
+        );
+        return new PdfFile(baos.toByteArray(), filename);
+    }
+
+    /**
+     * Phase 0.19: a neutral, print-safe theme for the cover letter page,
+     * composed from the shared context fonts and the service's standard
+     * palette. Kept separate from the resume templates deliberately: the
+     * cover letter is a document-level block, not a template layout — this
+     * is what guarantees the existing template corpus stays untouched.
+     */
+    private static TemplateSupport.Theme coverLetterTheme(PdfContext ctx) {
+        return new TemplateSupport.Theme(
+                ctx.nameFont, ctx.headlineFont, ctx.sectionHeaderFont,
+                ctx.itemTitleFont, ctx.itemSubtitleFont, ctx.bodyFont, ctx.dateFont,
+                PRIMARY_COLOR, SECONDARY_COLOR, ACCENT_COLOR,
+                false,
+                1.5f);
     }
 
     /**

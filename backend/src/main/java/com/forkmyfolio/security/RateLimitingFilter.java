@@ -66,8 +66,10 @@ public class RateLimitingFilter extends OncePerRequestFilter {
         String path = request.getRequestURI();
 
         // Determine if this is a download request or a general public API request
+        // Phase 0.19: /cover-letter is a PDF download endpoint and shares the
+        // download budget with /pdf, /markdown and /vcard.
         boolean isDownload = path.contains("/pdf") || path.contains("/markdown") || path.contains("/vcard")
-                || path.contains("/backup");
+                || path.contains("/cover-letter") || path.contains("/backup");
         boolean isPublicPortfolio = path.startsWith("/api/v1/portfolios");
         // DEF-1: analytics endpoints get their own tighter budget — they proxy
         // to an external provider and are cached server-side, so bursts are

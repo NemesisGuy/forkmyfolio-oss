@@ -9,6 +9,7 @@ node_modules/
 
 # ── Build outputs ────────────────────────────────────────────────────────────
 target/
+archunit_store/
 dist/
 .nuxt/
 .output/
