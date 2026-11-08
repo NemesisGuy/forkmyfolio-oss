@@ -15,6 +15,10 @@
 # configuration instead of silently serving a stale default.
 FROM nginx:1.30.0-alpine
 
+# Phase 0.21: capacity-tuned main config (worker_connections 8192,
+# worker_rlimit_nofile 65535, multi_accept) — see nginx.conf header.
+COPY nginx.conf /etc/nginx/nginx.conf
+
 COPY templates/default.conf.template.same-host /etc/nginx/templates-available/
 COPY templates/default.conf.template.detached /etc/nginx/templates-available/
 COPY validate-and-start.sh /validate-and-start.sh
