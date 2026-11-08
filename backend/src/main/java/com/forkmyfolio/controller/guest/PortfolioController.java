@@ -9,6 +9,8 @@ import com.forkmyfolio.model.PublicPortfolioSummary;
 import com.forkmyfolio.model.User;
 import com.forkmyfolio.model.UserSkill;
 import com.forkmyfolio.model.enums.VisitorStatType;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.forkmyfolio.service.PortfolioService;
 import com.forkmyfolio.service.UserSkillService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -18,12 +20,14 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.Cache;
 import org.springframework.cache.CacheManager;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -40,6 +44,7 @@ public class PortfolioController {
     private final UserSkillService userSkillService;
     private final com.forkmyfolio.service.impl.VisitorStatsService visitorStatsService;
     private final CacheManager cacheManager;
+    private final ObjectMapper objectMapper;
 
     /** Cache name shared with every mutation path's {@code @CacheEvict}. */
     private static final String PORTFOLIO_CACHE = "publicPortfolios";
@@ -47,25 +52,36 @@ public class PortfolioController {
     @GetMapping("/{slug}")
     @Operation(summary = "Get a user's public portfolio by their slug",
             description = "Retrieves the full public sections of a user's portfolio. "
-                    + "Served through the Redis read-through cache (Phase 0.20): the X-Cache response "
-                    + "header reports HIT (served from cache), MISS (assembled and now cached) "
-                    + "or BYPASS (cache not applicable). A private portfolio is answered with a "
-                    + "plain 404, indistinguishable from an unknown slug.")
+                    + "Served through the Redis read-through cache (Phase 0.20, response-body "
+                    + "caching Phase 0.23): the X-Cache response header reports HIT (served from "
+                    + "cache), MISS (assembled and now cached) or BYPASS (cache not applicable). "
+                    + "A private portfolio is answered with a plain 404, indistinguishable from "
+                    + "an unknown slug.")
     @TrackVisitor(VisitorStatType.TOTAL_VISITS)
-    public ResponseEntity<ApiResponseWrapper<PortfolioDto>> getPortfolioBySlug(
+    public ResponseEntity<byte[]> getPortfolioBySlug(
             @Parameter(description = "The unique, URL-friendly slug of the user.", example = "jane-doe") @PathVariable String slug) {
 
         visitorStatsService.incrementPortfolioView(slug);
 
         // Phase 0.20 — read-through cache at the controller boundary (NAG-01:
-        // DTO assembly is a controller responsibility, and the DTO is also the
-        // cache unit — assembling it twice under load is exactly the cost the
-        // cache exists to avoid). Manual get()/put() on the same cache entry
-        // ("publicPortfolios::slug") keeps every @CacheEvict valid unchanged,
-        // and lets the X-Cache header reflect what ACTUALLY happened.
+        // DTO assembly is a controller responsibility). Phase 0.23 upgrade:
+        // the cache unit is now the FULLY SERIALIZED response JSON, not the
+        // DTO tree. Rationale: the capacity rerun showed the backend pinned
+        // at ~70 req/s = exactly its 1-CPU x ~14 ms per-request cost, and the
+        // dominant component of that cost was Jackson re-serializing the SAME
+        // 99 KB DTO tree for every request — the cache avoided reassembly but
+        // not re-serialization. Storing the exact wire bytes (identical shape:
+        // same ApiResponseWrapper JSON, same ObjectMapper the MVC layer uses)
+        // makes a HIT a straight memcpy to the socket, with the single
+        // remaining per-request work being the Spring Security filter chain.
+        // The key space is UNCHANGED ("publicPortfolios::slug"), so every
+        // @CacheEvict in the mutation paths keeps working exactly as before;
+        // the String cache unit simply supersedes any PortfolioDto objects
+        // cached by the previous release (they are re-assembled and rewritten
+        // as JSON on the next MISS).
         Cache cache = cacheManager.getCache(PORTFOLIO_CACHE);
 
-        PortfolioDto portfolioDto = null;
+        byte[] responseBody = null;
         String cacheOutcome;
         if (cache != null) {
             Cache.ValueWrapper wrapper;
@@ -76,9 +92,9 @@ public class PortfolioController {
                 log.warn("Cache read failed for slug '{}' — falling back to assembly: {}", slug, e.getMessage());
                 wrapper = null;
             }
-            if (wrapper != null && wrapper.get() instanceof PortfolioDto cached) {
-                portfolioDto = cached;
-                cacheOutcome = "HIT"; // zero assembly work: services and MySQL untouched
+            if (wrapper != null && wrapper.get() instanceof String cachedJson) {
+                responseBody = cachedJson.getBytes(StandardCharsets.UTF_8);
+                cacheOutcome = "HIT"; // zero assembly AND zero serialization work
             } else {
                 cacheOutcome = "MISS";
             }
@@ -86,13 +102,22 @@ public class PortfolioController {
             cacheOutcome = "BYPASS";
         }
 
-        if (portfolioDto == null) {
+        if (responseBody == null) {
             User user = portfolioService.getPublicPortfolioUserBySlug(slug);
             Map<UUID, UserSkill> skillLookup = userSkillService.getUserSkillLookupMap(user);
-            portfolioDto = portfolioMapper.toDto(user, skillLookup);
+            PortfolioDto portfolioDto = portfolioMapper.toDto(user, skillLookup);
+            String json;
+            try {
+                json = objectMapper.writeValueAsString(new ApiResponseWrapper<>(portfolioDto));
+            } catch (JsonProcessingException e) {
+                // Never expected for generated DTO trees; if it ever happens,
+                // fail loudly rather than cache a broken representation.
+                throw new IllegalStateException("Failed to serialize public portfolio response for slug '" + slug + "'", e);
+            }
+            responseBody = json.getBytes(StandardCharsets.UTF_8);
             if (cache != null) {
                 try {
-                    cache.put(slug, portfolioDto);
+                    cache.put(slug, json);
                 } catch (RuntimeException e) {
                     log.warn("Cache write failed for slug '{}' — serving uncached response: {}", slug, e.getMessage());
                 }
@@ -102,7 +127,8 @@ public class PortfolioController {
         log.debug("Public portfolio '{}' served with X-Cache: {}", slug, cacheOutcome);
         return ResponseEntity.ok()
                 .header("X-Cache", cacheOutcome)
-                .body(new ApiResponseWrapper<>(portfolioDto));
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(responseBody);
     }
 
     /**

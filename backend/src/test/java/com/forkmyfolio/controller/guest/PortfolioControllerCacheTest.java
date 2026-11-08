@@ -7,10 +7,11 @@ import com.forkmyfolio.model.User;
 import com.forkmyfolio.service.PortfolioService;
 import com.forkmyfolio.service.UserSkillService;
 import com.forkmyfolio.service.impl.VisitorStatsService;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.cache.Cache;
@@ -37,9 +38,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * {@link PortfolioController#getPortfolioBySlug}. The real Redis round-trip,
  * eviction and header behaviour are covered separately in
  * {@code PublicPortfolioCacheIntegrationTest}; here we pin the local decisions:
- * HIT serves the cached DTO without touching the assembly pipeline, MISS
- * assembles and populates, a missing cache manager entry means BYPASS, and
- * Redis read/write failures degrade to assembly instead of failing the view.
+ * HIT serves the cached response JSON without touching the assembly pipeline,
+ * MISS assembles, serializes and populates, a missing cache manager entry
+ * means BYPASS, and Redis read/write failures degrade to assembly instead of
+ * failing the view.
  */
 @ExtendWith(MockitoExtension.class)
 class PortfolioControllerCacheTest {
@@ -59,7 +61,6 @@ class PortfolioControllerCacheTest {
     @Mock
     private Cache.ValueWrapper wrapper;
 
-    @InjectMocks
     private PortfolioController portfolioController;
 
     private MockMvc mockMvc;
@@ -69,6 +70,10 @@ class PortfolioControllerCacheTest {
 
     @BeforeEach
     void setUp() {
+        // Real ObjectMapper (the controller serializes the wrapper on MISS);
+        // everything else is the mock set above.
+        portfolioController = new PortfolioController(portfolioService, portfolioMapper,
+                userSkillService, visitorStatsService, cacheManager, new ObjectMapper());
         mockMvc = MockMvcBuilders.standaloneSetup(portfolioController).build();
         dto = new PortfolioDto();
     }
@@ -88,25 +93,28 @@ class PortfolioControllerCacheTest {
     }
 
     @Test
-    void hit_servesCachedDto_withoutCallingTheAssemblyPipeline() throws Exception {
+    void hit_servesCachedBytes_withoutCallingTheAssemblyPipelineOrJackson() throws Exception {
         when(cacheManager.getCache("publicPortfolios")).thenReturn(cache);
         when(cache.get("unit-slug")).thenReturn(wrapper);
-        when(wrapper.get()).thenReturn(dto);
+        // Phase 0.23: the cache unit is the pre-serialized response JSON.
+        when(wrapper.get()).thenReturn("{\"status\":\"success\",\"data\":{\"slug\":\"unit-slug\"},\"errors\":[]}");
 
         mockMvc.perform(get("/api/v1/portfolios/{slug}", "unit-slug"))
                 .andExpect(status().isOk())
                 .andExpect(header().string("X-Cache", "HIT"))
-                .andExpect(jsonPath("$.status").value("success"));
+                .andExpect(jsonPath("$.status").value("success"))
+                .andExpect(jsonPath("$.data.slug").value("unit-slug"));
 
-        // The whole point: on a HIT neither MySQL/Hibernate (services) nor the
-        // mapper may run.
+        // The whole point: on a HIT neither MySQL/Hibernate (services), the
+        // mapper, nor any re-serialization cost may appear — the response is
+        // served straight from the cached bytes.
         verify(portfolioService, never()).getPublicPortfolioUserBySlug(anyString());
         verify(userSkillService, never()).getUserSkillLookupMap(any());
         verify(portfolioMapper, never()).toDto(any(), any());
     }
 
     @Test
-    void miss_assembles_thenPopulatesTheCache_headerSaysMiss() throws Exception {
+    void miss_assembles_thenStoresTheSerializedJson_headerSaysMiss() throws Exception {
         when(cacheManager.getCache("publicPortfolios")).thenReturn(cache);
         when(cache.get("unit-slug")).thenReturn(null);
         user = initializedPublicUser("unit-slug");
@@ -119,7 +127,12 @@ class PortfolioControllerCacheTest {
                 .andExpect(header().string("X-Cache", "MISS"))
                 .andExpect(jsonPath("$.status").value("success"));
 
-        verify(cache).put("unit-slug", dto);
+        // Phase 0.23: the stored unit is the serialized JSON STRING, not the
+        // DTO object, so a later HIT serves bytes with no Jackson work.
+        ArgumentCaptor<String> cached = ArgumentCaptor.forClass(String.class);
+        verify(cache).put(eq("unit-slug"), cached.capture());
+        org.junit.jupiter.api.Assertions.assertTrue(cached.getValue().contains("\"status\":\"success\""),
+                "the cached unit must be the serialized response JSON");
     }
 
     @Test
