@@ -1,8 +1,8 @@
 package com.forkmyfolio.controller.guest;
 
 import com.forkmyfolio.dto.response.PortfolioDto;
-import com.forkmyfolio.mapper.PortfolioMapper;
 import com.forkmyfolio.model.User;
+import com.forkmyfolio.mapper.PortfolioMapper;
 import com.forkmyfolio.service.PortfolioService;
 import com.forkmyfolio.service.UserSkillService;
 import com.forkmyfolio.service.impl.VisitorStatsService;
@@ -12,6 +12,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.cache.CacheManager;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
@@ -21,6 +22,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -41,6 +43,9 @@ class PortfolioControllerTest {
     @Mock
     private VisitorStatsService visitorStatsService;
 
+    @Mock
+    private CacheManager cacheManager;
+
     @InjectMocks
     private PortfolioController portfolioController;
 
@@ -50,9 +55,14 @@ class PortfolioControllerTest {
     }
 
     @Test
-    void getPortfolioBySlug_shouldReturnOk() throws Exception {
+    void getPortfolioBySlug_shouldReturnOk_withDefaultBypassCacheHeader() throws Exception {
+        // Plain unit tests have no CacheManager-backed cache available
+        // (getCache → null), so the honest default is BYPASS.
         User testUser = new User();
         testUser.setSlug("test-slug");
+        testUser.setProjects(Collections.emptySet());
+        testUser.setExperiences(Collections.emptySet());
+        testUser.setUserSkills(Collections.emptySet());
 
         PortfolioDto portfolioDto = new PortfolioDto();
 
@@ -62,6 +72,7 @@ class PortfolioControllerTest {
 
         mockMvc.perform(get("/api/v1/portfolios/{slug}", "test-slug"))
                 .andExpect(status().isOk())
+                .andExpect(header().string("X-Cache", "BYPASS"))
                 .andExpect(jsonPath("$.status").value("success"));
     }
 }

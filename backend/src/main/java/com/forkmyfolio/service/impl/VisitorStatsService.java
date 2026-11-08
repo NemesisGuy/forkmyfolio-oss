@@ -144,8 +144,16 @@ public class VisitorStatsService {
      * bursts of async stat increments.
      */
     private void incrementStat(VisitorStatType type, String refId) {
-        visitorStatsRepository.seedRowIfAbsent(type.name(), refId);
-        visitorStatsRepository.incrementCount(type, refId);
+        // Phase 0.20: a portfolio view must never fail because a background
+        // stat write hit a transient DB problem (this method also runs on
+        // non-async callers in some tests — belt and braces either way).
+        try {
+            visitorStatsRepository.seedRowIfAbsent(type.name(), refId);
+            visitorStatsRepository.incrementCount(type, refId);
+        } catch (RuntimeException e) {
+            log.warn("Visitor stat increment for {}['{}'] failed — dropping (request unaffected): {}",
+                    type, refId, e.getMessage());
+        }
     }
 
     /**
