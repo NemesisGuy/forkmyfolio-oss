@@ -28,7 +28,9 @@ jobs:
       - name: Run test suite
         # Integration tests use Testcontainers (MySQL + Redis); the
         # ubuntu-latest runner provides a Docker daemon.
-        run: mvn -B -ntp test
+        # The runner daemon rejects API < 1.40 but docker-java defaults to
+        # 1.32 ("client version 1.32 is too old"), so pin the client version.
+        run: mvn -B -ntp test -DargLine="-Dapi.version=1.44"
         working-directory: backend
 
   frontend-admin:
