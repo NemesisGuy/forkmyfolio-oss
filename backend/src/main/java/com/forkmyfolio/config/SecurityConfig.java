@@ -7,6 +7,8 @@ import com.forkmyfolio.security.oauth2.HttpCookieOAuth2AuthorizationRequestRepos
 import com.forkmyfolio.security.oauth2.OAuth2AuthenticationFailureHandler;
 import com.forkmyfolio.security.oauth2.OAuth2AuthenticationSuccessHandler;
 import lombok.RequiredArgsConstructor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -36,6 +38,8 @@ import java.util.List;
 @EnableMethodSecurity(jsr250Enabled = true, securedEnabled = true)
 @RequiredArgsConstructor
 public class SecurityConfig {
+
+        private static final Logger log = LoggerFactory.getLogger(SecurityConfig.class);
 
         private final JwtAuthenticationFilter jwtAuthenticationFilter;
         private final AuthenticationProvider authenticationProvider;
@@ -80,7 +84,7 @@ public class SecurityConfig {
                                 }
                         }
                         config.setAllowedOrigins(origins);
-                        System.out.println("CORS Allowed Origins (Standardized): " + origins);
+                        log.info("CORS Allowed Origins (Standardized): {}", origins);
                 }
 
                 config.setAllowedHeaders(

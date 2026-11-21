@@ -1,4 +1,5 @@
-FROM eclipse-temurin:21-jre-alpine
+# Pinned to the 21.0.13.1 build: fixes CVE-2026-114938 (OpenJDK 21 < 21.0.13.1).
+FROM eclipse-temurin:21.0.13.1_2-jre-alpine
 WORKDIR /app
 COPY target/*.jar app.jar
 EXPOSE 8080

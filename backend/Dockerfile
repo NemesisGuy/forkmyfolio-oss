@@ -15,7 +15,9 @@ COPY src ./src
 RUN mvn clean package -DskipTests -Dmaven.test.skip=true
 
 # ---------- STAGE 2: Run the application ----------
-FROM eclipse-temurin:21-jre-alpine
+# Pinned to the 21.0.13.1 build: fixes CVE-2026-114938 (HotSpot Base64 decoder,
+# OpenJDK 21 < 21.0.13.1). Revisit when the next CPU is published.
+FROM eclipse-temurin:21.0.13.1_2-jre-alpine
 
 # Set working directory
 WORKDIR /app

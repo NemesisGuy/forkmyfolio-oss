@@ -25,7 +25,6 @@ const fetchUnreadCount = async () => {
   }
   try {
     unreadCount.value = await getUnreadMessageCount();
-    console.log(`[MessageService] Unread count updated: ${unreadCount.value}`);
   } catch (error) {
     console.error('Failed to fetch unread message count:', error);
     unreadCount.value = 0; // Reset on error to avoid a stale, incorrect count
@@ -53,7 +52,6 @@ const incrementUnreadCount = () => {
 // --- Automatic Refresh Logic ---
 const handleVisibilityChange = () => {
   if (!document.hidden) {
-    console.log('[MessageService] Tab is visible, fetching latest unread count.');
     fetchUnreadCount();
   }
 };

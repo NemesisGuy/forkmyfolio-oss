@@ -27,24 +27,19 @@ export function usePortfolioDownloader(slugRef) {
       return;
     }
 
-    console.log(`[Downloader] Starting PDF download for slug: ${slug}`);
     isDownloadingPdf.value = true;
     try {
       // 1. Await the raw HTTP response from the API call.
       const response = await downloadPublicPortfolioBySlug(slug);
-      console.log('[Downloader] Received raw response from API.', response);
 
       // 2. THE FIX: Correctly extract the Blob data from the response body.
       const blob = await response.blob();
-      console.log(`[Downloader] Extracted blob from response. Type: ${blob.type}, Size: ${blob.size}`);
 
       // 3. Extract the filename from headers, with a sensible fallback.
       const filename = getFilenameFromResponse(response, `${slug}-portfolio.pdf`);
-      console.log(`[Downloader] Determined filename: ${filename}`);
 
       // 4. Use the utility to trigger the download with the correct Blob and filename.
       triggerDownload(blob, filename);
-      console.log('[Downloader] Download triggered successfully.');
 
       successModalMessage.value = `The download for "${filename}" has started.`;
       showSuccessModal.value = true;
@@ -55,7 +50,6 @@ export function usePortfolioDownloader(slugRef) {
       showErrorModal.value = true;
     } finally {
       isDownloadingPdf.value = false;
-      console.log('[Downloader] Download process finished.');
     }
   };
 

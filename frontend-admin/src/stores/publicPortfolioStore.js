@@ -66,7 +66,6 @@ export function usePublicPortfolioStore() {
 
     // If we are already loading, returning the existing promise instead of starting a new one.
     if (activeFetchPromise && !force) {
-      console.log(`[PublicPortfolioStore] Reusing active fetch promise for slug: ${slug}`);
       return activeFetchPromise;
     }
 
@@ -81,7 +80,6 @@ export function usePublicPortfolioStore() {
     isPrivate.value = false; // Reset privacy flag on each new fetch
 
     activeFetchPromise = (async () => {
-      console.log(`[PublicPortfolioStore] Starting new fetch for slug: ${slug}`);
       try {
         // Use Promise.all to fetch all parts of the portfolio in parallel for performance.
         const [

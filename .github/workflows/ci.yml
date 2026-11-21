@@ -1,0 +1,64 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Backend (Maven tests)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+      - name: Run test suite
+        # Integration tests use Testcontainers (MySQL + Redis); the
+        # ubuntu-latest runner provides a Docker daemon.
+        run: mvn -B -ntp test
+        working-directory: backend
+
+  frontend-admin:
+    name: Frontend admin (Vitest)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend-admin/package-lock.json
+      - run: npm ci
+        working-directory: frontend-admin
+      - run: npm run test:unit -- --run
+        working-directory: frontend-admin
+
+  frontend-public:
+    name: Frontend public (Vitest + build)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend-public/package-lock.json
+      - run: npm ci
+        working-directory: frontend-public
+      - run: npm run test
+        working-directory: frontend-public
+      - run: npm run build
+        working-directory: frontend-public

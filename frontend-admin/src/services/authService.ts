@@ -69,14 +69,12 @@ function _updateAuthState(token: string | null, userData: User | null, isGuest: 
   }
   isAuthenticated.value = !!token;
   user.value = userData;
-  console.log(`[AuthService] Auth state updated. Authenticated: ${isAuthenticated.value}, Guest: ${isGuest}`);
 }
 
 /**
  * Clears the authentication state.
  */
 function _clearAuthState(): void {
-  console.log('[AuthService] Clearing auth state.');
   accessToken = null;
   localStorage.removeItem('accessToken');
   sessionStorage.removeItem('accessToken');
@@ -105,7 +103,6 @@ function passwordHasBeenChanged(): void {
     // Set a non-null value to satisfy the router guard. The next full page
     // reload or re-login will fetch the real timestamp from the backend.
     user.value.passwordLastChangedAt = new Date().toISOString();
-    console.log('[AuthService] passwordLastChangedAt flag updated locally to prevent re-redirect.');
   }
 }
 
@@ -118,7 +115,6 @@ function termsHaveBeenAccepted(): void {
     // Set a non-null value to satisfy the router guard. The next full page
     // reload or re-login will fetch the real timestamp from the backend.
     user.value.termsAcceptedAt = new Date().toISOString();
-    console.log('[AuthService] termsAcceptedAt flag updated locally to prevent re-redirect.');
   }
 }
 
@@ -174,7 +170,6 @@ async function register(userData: Record<string, unknown>): Promise<void> {
  * @param token - The guest token.
  */
 async function loginAsGuest(token: string): Promise<void> {
-  console.log('[AuthService] Initiating guest login...');
   const response = await guestPassService.login(token) as unknown as AuthResponse;
 
   accessToken = response.accessToken;
@@ -182,7 +177,6 @@ async function loginAsGuest(token: string): Promise<void> {
   try {
     const freshUserAccount = await getMyAccount();
     _updateAuthState(response.accessToken, freshUserAccount as User, true);
-    console.log('[AuthService] Guest login successful.');
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Unknown error';
     console.error('[AuthService] Failed to fetch profile for guest session:', message);
@@ -206,7 +200,6 @@ async function refreshToken(): Promise<boolean> {
       const response = await apiRefreshToken() as unknown as AuthResponse;
       accessToken = response.accessToken;
       isAuthenticated.value = true; // We have a new token
-      console.log('[AuthService] Token refresh successful.');
       return true;
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : 'Unknown error';
@@ -227,20 +220,16 @@ async function refreshToken(): Promise<boolean> {
  * It attempts to restore a session by refreshing the token and fetching user data.
  */
 async function initAuth(): Promise<void> {
-  console.log('[AuthService] Initializing session...');
   isLoading.value = true;
   try {
     // 1. If we have an accessToken in localStorage, try to use it first.
     if (accessToken) {
-      console.log('[AuthService] Found persisted access token, verifying...');
       try {
         const freshUserAccount = await getMyAccount();
         _updateAuthState(accessToken, freshUserAccount as User);
-        console.log('[AuthService] Session restored using persisted token.');
         return; // Success!
       } catch {
-        console.log('[AuthService] Persisted token invalid or expired. Attempting refresh...');
-        // Fall through to refresh logic
+        // Persisted token invalid or expired - fall through to refresh logic
       }
     }
 
@@ -250,16 +239,11 @@ async function initAuth(): Promise<void> {
       // If the session is valid, fetch the latest user data to ensure it's fresh.
       const freshUserAccount = await getMyAccount();
       _updateAuthState(accessToken, freshUserAccount as User);
-      console.log('[AuthService] Session restored via refresh token.');
     }
-  } catch (_error: unknown) {
-    const message = _error instanceof Error ? _error.message : 'Unknown error';
-    console.log('[AuthService] No active session found or refresh failed:', message);
+  } catch {
+    // No active session: nothing to restore.
   } finally {
     isLoading.value = false;
-    console.log(
-      `[AuthService] Session initialization complete. User is ${isAuthenticated.value ? 'authenticated' : ' not authenticated'}.`
-    );
   }
 }
 
