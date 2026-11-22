@@ -57,6 +57,18 @@ public class ClassicTemplate implements PortfolioPdfTemplate {
     }
 
     @Override
+    public TemplateSupport.CoverLetterStyle coverLetterStyle(PdfGenerationService.PdfContext ctx) {
+        // Classic identity: serif type, centred letterhead, black rule.
+        return new TemplateSupport.CoverLetterStyle(
+                new TemplateSupport.Theme(
+                        headingFont, bodyFont, headingFont, headingFont, bodyFont, bodyFont, bodyFont,
+                        BLACK, new Color(96, 96, 96), BLACK,
+                        false,
+                        1.5f),
+                TemplateSupport.Letterhead.CENTERED);
+    }
+
+    @Override
     public void generate(Document document, PdfGenerationService.PdfContext ctx, PortfolioData data)
             throws IOException, DocumentException {
 

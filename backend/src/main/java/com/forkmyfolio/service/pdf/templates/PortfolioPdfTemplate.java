@@ -93,6 +93,36 @@ public interface PortfolioPdfTemplate {
     }
 
     /**
+     * Phase 0.27: the cover-letter identity for this template. A cover
+     * letter must look like it belongs to the same document family as the
+     * chosen resume, but its layout is a letter (letterhead, date, body) -
+     * not a resume. Templates return their own fonts/colours plus the
+     * letterhead treatment that matches their header.
+     *
+     * <p>
+     * The default is a neutral, print-safe style built from the shared
+     * context fonts; every shipped template overrides it with its own
+     * palette so the letter follows the selected theme.
+     *
+     * @param context the shared fonts for this generation.
+     * @return the style used by {@link TemplateSupport#renderCoverLetter}.
+     */
+    default TemplateSupport.CoverLetterStyle coverLetterStyle(
+            PdfGenerationService.PdfContext context) {
+        return new TemplateSupport.CoverLetterStyle(
+                new TemplateSupport.Theme(
+                        context.nameFont, context.headlineFont, context.sectionHeaderFont,
+                        context.itemTitleFont, context.itemSubtitleFont, context.bodyFont,
+                        context.dateFont,
+                        PdfGenerationService.PRIMARY_COLOR,
+                        PdfGenerationService.SECONDARY_COLOR,
+                        PdfGenerationService.ACCENT_COLOR,
+                        false,
+                        1.5f),
+                TemplateSupport.Letterhead.LEFT);
+    }
+
+    /**
      * Defines the page size for this template.
      *
      * @return The page size rectangle. Defaults to A4.

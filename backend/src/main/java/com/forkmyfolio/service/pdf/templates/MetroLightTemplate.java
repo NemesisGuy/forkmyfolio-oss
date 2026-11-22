@@ -58,6 +58,19 @@ public class MetroLightTemplate implements PortfolioPdfTemplate {
     }
 
     @Override
+    public TemplateSupport.CoverLetterStyle coverLetterStyle(PdfGenerationService.PdfContext ctx) {
+        // Metro identity: Montserrat/Lato, upper-case centred letterhead, blue accent.
+        return new TemplateSupport.CoverLetterStyle(
+                new TemplateSupport.Theme(
+                        headingFont, bodyItalicFont, headingFont, headingFont, bodyItalicFont,
+                        bodyFont, bodyFont,
+                        TEXT_COLOR, SUBTLE_COLOR, ACCENT_COLOR,
+                        true,
+                        1.3f),
+                TemplateSupport.Letterhead.CENTERED);
+    }
+
+    @Override
     public void generate(Document document, PdfGenerationService.PdfContext ctx, PortfolioData data)
             throws IOException, DocumentException {
         TemplateSupport.Theme theme = new TemplateSupport.Theme(

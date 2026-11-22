@@ -56,6 +56,20 @@ public class TechnicalTemplate implements PortfolioPdfTemplate {
     }
 
     @Override
+    public TemplateSupport.CoverLetterStyle coverLetterStyle(PdfGenerationService.PdfContext ctx) {
+        // Technical identity: Helvetica + Courier, upper-case monospace letterhead,
+        // terminal-green rule.
+        return new TemplateSupport.CoverLetterStyle(
+                new TemplateSupport.Theme(
+                        helveticaBold, helveticaOblique, courier, helveticaBold,
+                        helveticaOblique, helvetica, courier,
+                        TEXT_COLOR, SUBTLE_COLOR, ACCENT_COLOR,
+                        true,
+                        1.35f),
+                TemplateSupport.Letterhead.MONO);
+    }
+
+    @Override
     public void generate(Document document, PdfGenerationService.PdfContext ctx, PortfolioData data)
             throws IOException, DocumentException {
         TemplateSupport.Theme theme = new TemplateSupport.Theme(

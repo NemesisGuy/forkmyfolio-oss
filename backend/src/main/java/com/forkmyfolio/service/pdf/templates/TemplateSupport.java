@@ -21,6 +21,8 @@ import org.openpdf.text.Rectangle;
 import org.openpdf.text.pdf.BaseFont;
 import org.openpdf.text.pdf.ColumnText;
 import org.openpdf.text.pdf.PdfContentByte;
+import org.openpdf.text.pdf.PdfPCell;
+import org.openpdf.text.pdf.PdfPTable;
 import org.openpdf.text.pdf.PdfPageEventHelper;
 import org.openpdf.text.pdf.PdfWriter;
 import org.openpdf.text.pdf.draw.LineSeparator;
@@ -28,12 +30,14 @@ import org.openpdf.text.pdf.draw.LineSeparator;
 import java.awt.Color;
 import java.io.IOException;
 import java.net.URI;
+import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.stream.Collectors;
 
@@ -68,6 +72,12 @@ import java.util.stream.Collectors;
  * {@link BaseFont} programs and sized/styled per use.
  *
  * <p>
+ * Phase 0.27: the cover letter is also theme-parameterised. Each template
+ * returns a {@link CoverLetterStyle} — its own fonts and colours plus the
+ * letterhead treatment that matches its resume header — so the letter looks
+ * like the selected template without pretending to be a resume.
+ *
+ * <p>
  * Adheres to NAG-01 (DBR): pure rendering utility, no entity mutation.
  */
 public final class TemplateSupport {
@@ -98,6 +108,38 @@ public final class TemplateSupport {
 
     private static final DateTimeFormatter MONTH_YEAR = DateTimeFormatter.ofPattern("MMM yyyy");
     private static final DateTimeFormatter YEAR_ONLY = DateTimeFormatter.ofPattern("yyyy");
+
+    /**
+     * Cover-letter letterhead treatments. Each template picks the one that
+     * matches its resume identity, so the letter reads as the same document
+     * family without copying a resume layout that does not belong on a
+     * letter.
+     */
+    public enum Letterhead {
+        /** Full-bleed dark bar: name/headline in white (Modern). */
+        BANNER,
+        /** Centred name, accent rule below (Classic, Executive, Metro, Minimal). */
+        CENTERED,
+        /** Left-aligned name with accent rule (Elegance, Business Card). */
+        LEFT,
+        /** Uppercase name + monospace contact entries (Technical). */
+        MONO
+    }
+
+    /**
+     * A template's cover-letter identity: the same {@link Theme} (fonts and
+     * colours) it uses for the resume, plus the letterhead treatment.
+     */
+    public record CoverLetterStyle(Theme theme, Letterhead letterhead) {
+        public CoverLetterStyle {
+            if (letterhead == null) {
+                letterhead = Letterhead.LEFT;
+            }
+        }
+    }
+
+    private static final DateTimeFormatter LETTER_DATE = DateTimeFormatter.ofPattern(
+            "d MMMM yyyy", Locale.ENGLISH);
 
     // ------------------------------------------------------------------
     // Shared content helpers (single source of truth; the template
@@ -232,7 +274,8 @@ public final class TemplateSupport {
         headlineLine.setSpacingAfter(8);
         doc.add(headlineLine);
 
-        Paragraph contact = buildContactLine(theme, data);
+        Paragraph contact = buildContactLine(theme, data, theme.accentColor(),
+                theme.subtleColor(), Element.ALIGN_CENTER, 10);
         if (contact != null) {
             doc.add(contact);
         }
@@ -567,33 +610,45 @@ public final class TemplateSupport {
     }
 
     /**
-     * Full cover letter page: vertical breathing room, the standard header
-     * (name, headline, contact line — honouring {@code includeContact}),
-     * a "Cover Letter" heading and the owner's template text split into
-     * blank-line paragraphs with single newlines kept as line breaks.
+     * Full cover letter page in the selected template's identity: a
+     * letterhead styled like that template's resume header, a date line and
+     * the owner's template text split into blank-line paragraphs. A letter
+     * has no "Cover Letter" heading and no resume sections — the letterhead
+     * and greeting carry the structure.
      *
      * <p>
-     * Content is side-indented by ~7% of the page width so the page reads
-     * correctly even inside a resume template whose own document margins
-     * are zero (the "modern" template's full-bleed layout). Does NOT close
+     * Content is side-indented only when the hosting document has no side
+     * margins of its own (the "modern" template's full-bleed page): the
+     * effective indent is {@code max(24pt, 7% of page width) - page margin},
+     * so margined templates align with their own text block. Does NOT close
      * the document — the caller controls the lifecycle.
      */
-    public static void renderCoverLetterPage(Document doc, Theme theme, PortfolioData data,
-            String company, String role) throws DocumentException {
-        Paragraph spacer = new Paragraph(" ");
-        spacer.setLeading(56f);
-        doc.add(spacer);
+    public static void renderCoverLetter(Document doc, CoverLetterStyle style,
+            PortfolioData data, String company, String role) throws DocumentException {
+        Theme theme = style.theme();
+        float indent = letterIndent(doc);
 
-        renderHeader(doc, theme, data);
+        switch (style.letterhead()) {
+            case BANNER -> renderBannerLetterhead(doc, theme, data, indent);
+            case CENTERED -> renderCenteredLetterhead(doc, theme, data, indent);
+            case MONO -> renderMonoLetterhead(doc, theme, data, indent);
+            case LEFT -> renderLeftLetterhead(doc, theme, data, indent);
+        }
 
         String text = applyCoverLetterVariables(data.coverLetterTemplate(), company, role).trim();
         if (text.isEmpty()) {
             return;
         }
 
-        renderSectionHeader(doc, theme, "Cover Letter");
+        Paragraph date = new Paragraph(LocalDate.now().format(LETTER_DATE),
+                font(theme.bodyFont(), 9, theme.subtleColor()));
+        date.setAlignment(Element.ALIGN_RIGHT);
+        date.setIndentationLeft(indent);
+        date.setIndentationRight(indent);
+        date.setSpacingBefore(style.letterhead() == Letterhead.BANNER ? 26 : 22);
+        date.setSpacingAfter(16);
+        doc.add(date);
 
-        float indent = Math.max(24f, doc.getPageSize().getWidth() * 0.07f);
         for (String rawParagraph : text.split("\\r?\\n\\s*\\r?\\n")) {
             String paragraphText = rawParagraph.trim();
             if (paragraphText.isEmpty()) {
@@ -606,6 +661,187 @@ public final class TemplateSupport {
             paragraph.setSpacingAfter(10);
             doc.add(paragraph);
         }
+    }
+
+    private static void renderBannerLetterhead(Document doc, Theme theme, PortfolioData data,
+            float indent) throws DocumentException {
+        PdfPTable banner = new PdfPTable(1);
+        banner.setWidthPercentage(100);
+        PdfPCell cell = new PdfPCell();
+        cell.setBorder(Rectangle.NO_BORDER);
+        cell.setBackgroundColor(theme.textColor());
+        cell.setPaddingTop(24);
+        cell.setPaddingBottom(18);
+        // The banner is full-bleed, so its inner text needs its own inset even
+        // when the hosting document has no side margins (the Modern resume).
+        float inset = Math.max(indent, 24f);
+        cell.setPaddingLeft(inset);
+        cell.setPaddingRight(inset);
+
+        Paragraph nameLine = new Paragraph(coverName(theme, data, false),
+                font(theme.nameFont(), 24, Color.WHITE));
+        nameLine.setAlignment(Element.ALIGN_CENTER);
+        nameLine.setLeading(0, 1.3f);
+        nameLine.setSpacingAfter(3);
+        cell.addElement(nameLine);
+
+        String headline = data.profile().getHeadline();
+        if (headline != null && !headline.isBlank()) {
+            Paragraph headlineLine = new Paragraph(headline,
+                    font(theme.headlineFont(), 12, Color.WHITE));
+            headlineLine.setAlignment(Element.ALIGN_CENTER);
+            headlineLine.setLeading(0, 1.3f);
+            headlineLine.setSpacingAfter(8);
+            cell.addElement(headlineLine);
+        }
+
+        Paragraph contact = buildContactLine(theme, data, Color.WHITE, Color.WHITE,
+                Element.ALIGN_CENTER, 9);
+        if (contact != null) {
+            contact.setSpacingAfter(0);
+            cell.addElement(contact);
+        }
+        banner.addCell(cell);
+        doc.add(banner);
+    }
+
+    private static void renderCenteredLetterhead(Document doc, Theme theme, PortfolioData data,
+            float indent) throws DocumentException {
+        Paragraph nameLine = new Paragraph(coverName(theme, data, false),
+                font(theme.nameFont(), 26, theme.textColor()));
+        nameLine.setAlignment(Element.ALIGN_CENTER);
+        nameLine.setLeading(0, 1.3f);
+        nameLine.setSpacingAfter(2);
+        nameLine.setIndentationLeft(indent);
+        nameLine.setIndentationRight(indent);
+        doc.add(nameLine);
+
+        String headline = data.profile().getHeadline();
+        if (headline != null && !headline.isBlank()) {
+            Paragraph headlineLine = new Paragraph(headline,
+                    font(theme.headlineFont(), 12, theme.accentColor()));
+            headlineLine.setAlignment(Element.ALIGN_CENTER);
+            headlineLine.setLeading(0, 1.3f);
+            headlineLine.setSpacingAfter(6);
+            headlineLine.setIndentationLeft(indent);
+            headlineLine.setIndentationRight(indent);
+            doc.add(headlineLine);
+        }
+
+        Paragraph contact = buildContactLine(theme, data, theme.accentColor(), theme.subtleColor(),
+                Element.ALIGN_CENTER, 9);
+        if (contact != null) {
+            contact.setIndentationLeft(indent);
+            contact.setIndentationRight(indent);
+            doc.add(contact);
+        }
+
+        Paragraph rule = new Paragraph(0);
+        rule.add(new Chunk(new LineSeparator(1f, 100, theme.accentColor(),
+                Element.ALIGN_CENTER, 0)));
+        rule.setSpacingBefore(6);
+        rule.setSpacingAfter(0);
+        rule.setIndentationLeft(indent);
+        rule.setIndentationRight(indent);
+        doc.add(rule);
+    }
+
+    private static void renderLeftLetterhead(Document doc, Theme theme, PortfolioData data,
+            float indent) throws DocumentException {
+        Paragraph nameLine = new Paragraph(coverName(theme, data, false),
+                font(theme.nameFont(), 24, theme.textColor()));
+        nameLine.setAlignment(Element.ALIGN_LEFT);
+        nameLine.setLeading(0, 1.3f);
+        nameLine.setSpacingAfter(2);
+        nameLine.setIndentationLeft(indent);
+        nameLine.setIndentationRight(indent);
+        doc.add(nameLine);
+
+        String headline = data.profile().getHeadline();
+        if (headline != null && !headline.isBlank()) {
+            Paragraph headlineLine = new Paragraph(headline,
+                    font(theme.headlineFont(), 12, theme.accentColor()));
+            headlineLine.setLeading(0, 1.3f);
+            headlineLine.setSpacingAfter(4);
+            headlineLine.setIndentationLeft(indent);
+            headlineLine.setIndentationRight(indent);
+            doc.add(headlineLine);
+        }
+
+        Paragraph contact = buildContactLine(theme, data, theme.accentColor(), theme.subtleColor(),
+                Element.ALIGN_LEFT, 9);
+        if (contact != null) {
+            contact.setIndentationLeft(indent);
+            contact.setIndentationRight(indent);
+            doc.add(contact);
+        }
+
+        Paragraph rule = new Paragraph(0);
+        rule.add(new Chunk(new LineSeparator(1f, 100, theme.accentColor(),
+                Element.ALIGN_CENTER, 0)));
+        rule.setSpacingBefore(6);
+        rule.setSpacingAfter(0);
+        rule.setIndentationLeft(indent);
+        rule.setIndentationRight(indent);
+        doc.add(rule);
+    }
+
+    private static void renderMonoLetterhead(Document doc, Theme theme, PortfolioData data,
+            float indent) throws DocumentException {
+        Paragraph nameLine = new Paragraph(coverName(theme, data, true),
+                font(theme.nameFont(), 20, theme.textColor()));
+        nameLine.setLeading(0, 1.3f);
+        nameLine.setSpacingAfter(2);
+        nameLine.setIndentationLeft(indent);
+        nameLine.setIndentationRight(indent);
+        doc.add(nameLine);
+
+        String headline = data.profile().getHeadline();
+        if (headline != null && !headline.isBlank()) {
+            Paragraph headlineLine = new Paragraph(headline,
+                    font(theme.bodyFont(), 10, theme.accentColor()));
+            headlineLine.setLeading(0, 1.35f);
+            headlineLine.setSpacingAfter(4);
+            headlineLine.setIndentationLeft(indent);
+            headlineLine.setIndentationRight(indent);
+            doc.add(headlineLine);
+        }
+
+        for (ContactEntry entry : contactEntries(data)) {
+            // sectionFont is the template's accent/monospace face (Technical
+            // uses Courier here), which is what gives the mono letterhead its
+            // grep-able, terminal-style contact block.
+            Paragraph line = new Paragraph(entry.label(),
+                    font(theme.sectionFont(), 9, theme.subtleColor()));
+            line.setLeading(0, 1.3f);
+            line.setSpacingAfter(1);
+            line.setIndentationLeft(indent);
+            line.setIndentationRight(indent);
+            doc.add(line);
+        }
+
+        Paragraph rule = new Paragraph(0);
+        rule.add(new Chunk(new LineSeparator(0.75f, 100, theme.accentColor(),
+                Element.ALIGN_CENTER, 0)));
+        rule.setSpacingBefore(6);
+        rule.setSpacingAfter(0);
+        rule.setIndentationLeft(indent);
+        rule.setIndentationRight(indent);
+        doc.add(rule);
+    }
+
+    /** The letter's side indent, net of the hosting document's own margins. */
+    private static float letterIndent(Document doc) {
+        float side = Math.max(24f, doc.getPageSize().getWidth() * 0.07f);
+        return Math.max(0f, side - doc.leftMargin());
+    }
+
+    /** Name as it should appear on the letterhead. */
+    private static String coverName(Theme theme, PortfolioData data, boolean forceUpper) {
+        User user = data.profile().getUser();
+        String name = user == null ? ""
+                : (user.getFirstName() + " " + user.getLastName()).trim();
+        return (forceUpper || theme.upperCaseHeadings()) ? name.toUpperCase(Locale.ENGLISH) : name;
     }
 
     /** Footer block: generator credit line. */
@@ -666,49 +902,62 @@ public final class TemplateSupport {
         return rule;
     }
 
-    private static Paragraph buildContactLine(Theme theme, PortfolioData data) {
-        // Phase 8.3: the contact block honours the owner's export contact
-        // toggle (includeContact) and the email shown is the export data's
-        // contactEmail — publicEmail for public exports, publicEmail-or-
-        // account-email for owner exports (parity with the Markdown export;
-        // the previous code read profile.publicEmail directly, which dropped
-        // the owner fallback in PDFs).
+    /** One contact entry rendered on a letterhead or contact line. */
+    private record ContactEntry(String label, String reference) {
+    }
+
+    /**
+     * Contact entries honouring {@code includeContact}; the email shown is
+     * {@link PortfolioData#contactEmail()} (publicEmail for public exports,
+     * publicEmail-or-account-email for owner exports), never the raw
+     * profile field.
+     */
+    private static List<ContactEntry> contactEntries(PortfolioData data) {
         if (!data.includeContact()) {
-            return null;
+            return List.of();
         }
         PortfolioProfile profile = data.profile();
-        List<Chunk> parts = new ArrayList<>();
+        List<ContactEntry> entries = new ArrayList<>();
         if (data.contactEmail() != null && !data.contactEmail().isBlank()) {
-            parts.add(linkedText(theme, data.contactEmail(), "mailto:" + data.contactEmail()));
+            entries.add(new ContactEntry(data.contactEmail(), "mailto:" + data.contactEmail()));
         }
         if (profile.getWebsiteUrl() != null && !profile.getWebsiteUrl().isBlank()) {
-            parts.add(linkedText(theme, profile.getWebsiteUrl(), profile.getWebsiteUrl()));
+            entries.add(new ContactEntry(profile.getWebsiteUrl(), profile.getWebsiteUrl()));
         }
         if (profile.getLinkedinUrl() != null && !profile.getLinkedinUrl().isBlank()) {
-            parts.add(linkedText(theme, profile.getLinkedinUrl(), profile.getLinkedinUrl()));
+            entries.add(new ContactEntry(profile.getLinkedinUrl(), profile.getLinkedinUrl()));
         }
         if (profile.getGithubUrl() != null && !profile.getGithubUrl().isBlank()) {
-            parts.add(linkedText(theme, profile.getGithubUrl(), profile.getGithubUrl()));
+            entries.add(new ContactEntry(profile.getGithubUrl(), profile.getGithubUrl()));
         }
-        if (parts.isEmpty()) {
+        return entries;
+    }
+
+    /**
+     * One-line contact strip for a letterhead, or {@code null} when the
+     * export excludes contact details or none are configured.
+     */
+    private static Paragraph buildContactLine(Theme theme, PortfolioData data, Color linkColor,
+            Color separatorColor, int alignment, float fontSize) {
+        List<ContactEntry> entries = contactEntries(data);
+        if (entries.isEmpty()) {
             return null;
         }
         Paragraph contact = new Paragraph(10);
-        contact.setAlignment(Element.ALIGN_CENTER);
+        contact.setAlignment(alignment);
         contact.setSpacingAfter(6);
-        for (int i = 0; i < parts.size(); i++) {
-            contact.add(parts.get(i));
-            if (i < parts.size() - 1) {
-                contact.add(new Chunk("  •  ", font(theme.bodyFont(), 10, theme.subtleColor())));
+        for (int i = 0; i < entries.size(); i++) {
+            ContactEntry entry = entries.get(i);
+            Chunk chunk = new Chunk(entry.label(), font(theme.bodyFont(), fontSize, linkColor));
+            if (entry.reference() != null) {
+                chunk.setAnchor(entry.reference());
+            }
+            contact.add(chunk);
+            if (i < entries.size() - 1) {
+                contact.add(new Chunk("  •  ", font(theme.bodyFont(), fontSize, separatorColor)));
             }
         }
         return contact;
-    }
-
-    private static Chunk linkedText(Theme theme, String label, String reference) {
-        Chunk chunk = new Chunk(label, font(theme.bodyFont(), 10, theme.accentColor()));
-        chunk.setAnchor(reference);
-        return chunk;
     }
 
     private static String primaryUrl(Project proj) {

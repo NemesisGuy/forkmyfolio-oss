@@ -168,23 +168,7 @@ public class PdfGenerationService {
 
         // The templateName parameter is now ignored in favor of settings.
         // This ensures the user's chosen default is always respected for their portfolio.
-        String effectiveTemplateName = freshUser.getUserSettings().stream()
-                .filter(s -> "portfolio.pdf.template".equals(s.getName()))
-                .map(UserSetting::getValue)
-                .findFirst()
-                .orElseGet(() -> settingRepository.findByName("DEFAULT_PDF_TEMPLATE")
-                        .map(Setting::getValue)
-                        .orElseGet(() -> settingRepository.findByName("portfolio.pdf.template")
-                                .map(Setting::getValue)
-                                .orElse("modern"))); // Final fallback if user and global settings are missing.
-
-        // Phase 8 (8.2): backward compatibility — the retired "metro-dark"
-        // key aliases to its print-safe replacement "metro-light" so existing
-        // user preferences keep working instead of falling back to "modern".
-        if ("metro-dark".equalsIgnoreCase(effectiveTemplateName)) {
-            log.info("Legacy PDF template preference 'metro-dark' aliased to 'metro-light'.");
-            effectiveTemplateName = "metro-light";
-        }
+        String effectiveTemplateName = resolveTemplateName(freshUser);
 
         log.info("Starting PDF generation process for user '{}' with effective template: {}", freshUser.getSlug(), effectiveTemplateName);
 
@@ -197,11 +181,7 @@ public class PdfGenerationService {
         log.info("Generating PDF for user: {}", freshUser.getEmail());
 
         // 2. Select the template
-        PortfolioPdfTemplate template = templates.get(effectiveTemplateName.toLowerCase());
-        if (template == null) {
-            log.error("Effective PDF template '{}' not found. Defaulting to 'modern'.", effectiveTemplateName);
-            template = templates.get("modern");
-        }
+        PortfolioPdfTemplate template = templateFor(effectiveTemplateName);
 
         // 3. Generate the PDF.
         // Phase 0.12 (OpenPDF migration): page size, margins and page events
@@ -229,9 +209,25 @@ public class PdfGenerationService {
             // it is the separate `export.coverletter.public` switch, OFF
             // unless the owner explicitly opted in (PRV-1).
             if (portfolioData.includeCoverLetter()) {
-                TemplateSupport.renderCoverLetterPage(document, coverLetterTheme(ctx),
-                        portfolioData, company, role);
-                document.newPage();
+                // Phase 0.27: the letter adopts the SELECTED resume template's
+                // identity (fonts, palette, letterhead treatment) instead of a
+                // neutral one, so the download reads as one document family.
+                // The layout stays a letter: letterhead, date, body - no resume
+                // sections and no "Cover Letter" banner heading.
+                //
+                // A card-sized canvas cannot hold a letter (the card template is
+                // a 3.5x2in legacy archive entry), so the letter is omitted
+                // there rather than truncated to illegibility.
+                if (pageSize.getWidth() < PageSize.A5.getWidth()
+                        || pageSize.getHeight() < PageSize.A5.getHeight()) {
+                    log.warn("Template '{}' uses a {}x{}pt page - too small for a cover "
+                            + "letter; omitting the IN_PDF letter.", effectiveTemplateName,
+                            pageSize.getWidth(), pageSize.getHeight());
+                } else {
+                    TemplateSupport.renderCoverLetter(document, template.coverLetterStyle(ctx),
+                            portfolioData, company, role);
+                    document.newPage();
+                }
             }
             template.generate(document, ctx, portfolioData);
         } catch (IOException | DocumentException e) {
@@ -263,9 +259,10 @@ public class PdfGenerationService {
      * 404 so configuration is never enumerable.
      *
      * <p>
-     * Rendered through the SAME {@link TemplateSupport#renderCoverLetterPage}
-     * block as the resume-appended page, with a neutral professional
-     * theme derived from the shared {@link PdfContext} fonts.
+     * Rendered through the SAME {@link TemplateSupport#renderCoverLetter}
+     * block as the resume-appended page, adopting the owner's SELECTED resume
+     * template identity (fonts, palette, letterhead) on a standard A4 letter
+     * canvas.
      *
      * @param user    the cover letter's owner (resolved identity; the
      *                controller already verified ownership).
@@ -287,13 +284,25 @@ public class PdfGenerationService {
 
         log.info("Generating standalone cover letter PDF for user: {}", freshUser.getEmail());
 
+        // Phase 0.27: the standalone letter uses the owner's selected resume
+        // template identity, so both cover-letter outputs (page 1 of the resume
+        // and the separate download) look the same. A letter is always A4; it
+        // keeps the template's own side/top margins so the letterhead and body
+        // align with that template's resume. A card-sized template falls back
+        // to standard letter margins.
+        PortfolioPdfTemplate template = templateFor(resolveTemplateName(freshUser));
+        Rectangle templatePage = template.getPageSize();
+        float[] margins = templatePage.getWidth() < PageSize.A5.getWidth()
+                || templatePage.getHeight() < PageSize.A5.getHeight()
+                        ? new float[] { 40, 40, 50, 40 }
+                        : template.getMargins();
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        Document document = new Document(PageSize.A4, 40, 40, 50, 40);
+        Document document = new Document(PageSize.A4, margins[0], margins[1], margins[2], margins[3]);
         try {
             PdfWriter.getInstance(document, baos);
             document.open();
-            TemplateSupport.renderCoverLetterPage(document, coverLetterTheme(new PdfContext()),
-                    data, company, role);
+            TemplateSupport.renderCoverLetter(document,
+                    template.coverLetterStyle(new PdfContext()), data, company, role);
         } catch (IOException | DocumentException e) {
             log.error("Failed to generate the cover letter PDF. Aborting.", e);
             throw new RuntimeException("Failed to generate the cover letter PDF due to a resource loading issue.", e);
@@ -310,19 +319,44 @@ public class PdfGenerationService {
     }
 
     /**
-     * Phase 0.19: a neutral, print-safe theme for the cover letter page,
-     * composed from the shared context fonts and the service's standard
-     * palette. Kept separate from the resume templates deliberately: the
-     * cover letter is a document-level block, not a template layout — this
-     * is what guarantees the existing template corpus stays untouched.
+     * Resolves the template the owner selected for their portfolio: the
+     * per-user {@code portfolio.pdf.template} setting first, then the global
+     * defaults, then "modern". The retired "metro-dark" key aliases to its
+     * print-safe replacement so old preferences keep working.
+     *
+     * <p>
+     * Phase 0.27: shared by the resume download and the standalone cover
+     * letter so both always use the same document family.
      */
-    private static TemplateSupport.Theme coverLetterTheme(PdfContext ctx) {
-        return new TemplateSupport.Theme(
-                ctx.nameFont, ctx.headlineFont, ctx.sectionHeaderFont,
-                ctx.itemTitleFont, ctx.itemSubtitleFont, ctx.bodyFont, ctx.dateFont,
-                PRIMARY_COLOR, SECONDARY_COLOR, ACCENT_COLOR,
-                false,
-                1.5f);
+    private String resolveTemplateName(User freshUser) {
+        String effectiveTemplateName = freshUser.getUserSettings().stream()
+                .filter(s -> "portfolio.pdf.template".equals(s.getName()))
+                .map(UserSetting::getValue)
+                .findFirst()
+                .orElseGet(() -> settingRepository.findByName("DEFAULT_PDF_TEMPLATE")
+                        .map(Setting::getValue)
+                        .orElseGet(() -> settingRepository.findByName("portfolio.pdf.template")
+                                .map(Setting::getValue)
+                                .orElse("modern"))); // Final fallback if user and global settings are missing.
+
+        // Phase 8 (8.2): backward compatibility — the retired "metro-dark"
+        // key aliases to its print-safe replacement "metro-light" so existing
+        // user preferences keep working instead of falling back to "modern".
+        if ("metro-dark".equalsIgnoreCase(effectiveTemplateName)) {
+            log.info("Legacy PDF template preference 'metro-dark' aliased to 'metro-light'.");
+            return "metro-light";
+        }
+        return effectiveTemplateName;
+    }
+
+    /** The template instance for a resolved name, falling back to "modern". */
+    private PortfolioPdfTemplate templateFor(String templateName) {
+        PortfolioPdfTemplate template = templates.get(templateName.toLowerCase());
+        if (template == null) {
+            log.error("Effective PDF template '{}' not found. Defaulting to 'modern'.", templateName);
+            return templates.get("modern");
+        }
+        return template;
     }
 
     /**

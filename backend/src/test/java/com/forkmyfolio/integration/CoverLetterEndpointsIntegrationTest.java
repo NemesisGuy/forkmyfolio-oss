@@ -114,17 +114,20 @@ public class CoverLetterEndpointsIntegrationTest extends AbstractMySqlIntegratio
 
         byte[] ownerPdf = downloadPdf(ownerJwt);
         String ownerPdfText = extractPdfText(ownerPdf);
-        assertThat(ownerPdfText).contains("Cover Letter");
-        assertThat(ownerPdfText.replaceAll("\\s+", " ")).contains(LETTER_TEXT);
+        // Phase 0.27: the letter page is a real letter (letterhead + date +
+        // body), not a resume section titled "Cover Letter".
+        assertThat(ownerPdfText.replaceAll("\\s+", " ").replaceAll("-\\s+", "-"))
+                .contains(LETTER_TEXT);
 
         // Phase 0.26: the letter is page 1 and the resume follows — it is no
         // longer appended after the resume.
         var reader = new org.openpdf.text.pdf.PdfReader(ownerPdf);
         try {
             assertThat(reader.getNumberOfPages()).isGreaterThanOrEqualTo(2);
-            String pageOne = new org.openpdf.text.pdf.parser.PdfTextExtractor(reader).getTextFromPage(1);
-            assertThat(pageOne).contains("Cover Letter");
-            assertThat(pageOne.replaceAll("\\s+", " ")).contains(LETTER_TEXT);
+            String pageOne = new org.openpdf.text.pdf.parser.PdfTextExtractor(reader)
+                    .getTextFromPage(1).replaceAll("\\s+", " ").replaceAll("-\\s+", "-");
+            assertThat(pageOne).contains(LETTER_TEXT);
+            assertThat(pageOne).doesNotContain("Cover Letter");
 
             String lastPage = new org.openpdf.text.pdf.parser.PdfTextExtractor(reader)
                     .getTextFromPage(reader.getNumberOfPages());
@@ -139,7 +142,6 @@ public class CoverLetterEndpointsIntegrationTest extends AbstractMySqlIntegratio
         setMode("IN_PDF");
 
         // Guest
-        assertThat(downloadPdfText(null)).doesNotContain("Cover Letter");
         assertThat(downloadPdfText(null)).doesNotContain(LETTER_TEXT);
         assertThat(downloadMarkdown(null)).doesNotContain("## ✉️ Cover Letter");
 
@@ -163,9 +165,9 @@ public class CoverLetterEndpointsIntegrationTest extends AbstractMySqlIntegratio
         try {
             assertThat(reader.getNumberOfPages()).isGreaterThanOrEqualTo(2);
             String pageOne = new org.openpdf.text.pdf.parser.PdfTextExtractor(reader)
-                    .getTextFromPage(1).replaceAll("\\s+", " ");
-            assertThat(pageOne).contains("Cover Letter");
+                    .getTextFromPage(1).replaceAll("\\s+", " ").replaceAll("-\\s+", "-");
             assertThat(pageOne).contains(LETTER_TEXT);
+            assertThat(pageOne).doesNotContain("Cover Letter");
         } finally {
             reader.close();
         }
@@ -174,7 +176,8 @@ public class CoverLetterEndpointsIntegrationTest extends AbstractMySqlIntegratio
         assertThat(downloadPdfText(ownerJwt)).doesNotContain(LETTER_TEXT);
 
         // Non-owner authenticated users see the same public export.
-        assertThat(downloadPdfText(attackerJwt).replaceAll("\\s+", " ")).contains(LETTER_TEXT);
+        assertThat(downloadPdfText(attackerJwt).replaceAll("\\s+", " ").replaceAll("-\\s+", "-"))
+                .contains(LETTER_TEXT);
 
         // Markdown honours the same public switch.
         assertThat(downloadMarkdown(null)).contains("## ✉️ Cover Letter");
@@ -221,11 +224,13 @@ public class CoverLetterEndpointsIntegrationTest extends AbstractMySqlIntegratio
         assertThat(new String(pdf, 0, 5, java.nio.charset.StandardCharsets.US_ASCII)).startsWith("%PDF");
         assertThat(pdf.length).isGreaterThan(1000);
         String text = extractPdfText(pdf);
-        // PDF text extraction inserts line breaks mid-paragraph; compare on
-        // a whitespace-collapsed view so assertions read like a human does.
+        // PDF text extraction inserts line breaks mid-paragraph (including
+        // after a hyphen); compare on a whitespace-collapsed view so
+        // assertions read like a human does.
         String flat = text.replaceAll("\\s+", " ");
-        assertThat(flat).contains("Dear " + company + ", I is applying for " + role + ".");
-        assertThat(flat).contains(LETTER_TEXT);
+        assertThat(flat.replaceAll("-\\s+", "-"))
+                .contains("Dear " + company + ", I is applying for " + role + ".");
+        assertThat(flat.replaceAll("-\\s+", "-")).contains(LETTER_TEXT);
         // Placeholder tokens are replaced, not echoed
         assertThat(flat).doesNotContain("{{company}}");
         assertThat(flat).doesNotContain("{{role}}");

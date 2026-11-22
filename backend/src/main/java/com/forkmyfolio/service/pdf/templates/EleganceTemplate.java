@@ -105,6 +105,19 @@ public class EleganceTemplate implements PortfolioPdfTemplate {
         createTestimonialsSection(document, data, brief);
     }
 
+    @Override
+    public TemplateSupport.CoverLetterStyle coverLetterStyle(PdfGenerationService.PdfContext ctx) {
+        // Elegance identity: Montserrat/Lato, upper-case left letterhead, teal accent.
+        return new TemplateSupport.CoverLetterStyle(
+                new TemplateSupport.Theme(
+                        headingFont, bodyFont, headingFont, headingFont, bodyItalicFont,
+                        bodyFont, bodyFont,
+                        TEXT_COLOR, SUBTLE_COLOR, ACCENT_COLOR,
+                        true,
+                        1.4f),
+                TemplateSupport.Letterhead.LEFT);
+    }
+
     private void createHeader(Document doc, PortfolioData data, BaseFont solidIconFont, BaseFont brandsIconFont)
             throws DocumentException {
         PortfolioProfile profile = data.profile();

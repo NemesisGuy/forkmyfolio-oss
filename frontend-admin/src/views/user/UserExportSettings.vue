@@ -163,7 +163,9 @@
                   </label>
                 </div>
                 <p class="text-muted small mb-0 mt-3">
-                  The letter text lives in
+                  The letter is formatted as a letter — the same letterhead, fonts and colours
+                  as your selected PDF template, but with a date and body text instead of
+                  resume sections. The letter text lives in
                   <router-link :to="{ name: 'profile', params: { slug: profileSlug } }">
                     Profile &amp; Account
                   </router-link>

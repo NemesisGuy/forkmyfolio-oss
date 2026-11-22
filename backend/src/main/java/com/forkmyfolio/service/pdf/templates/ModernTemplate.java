@@ -114,6 +114,19 @@ public class ModernTemplate implements PortfolioPdfTemplate {
         document.add(footerText);
     }
 
+    @Override
+    public TemplateSupport.CoverLetterStyle coverLetterStyle(PdfGenerationService.PdfContext ctx) {
+        // Same identity as the resume: dark navy banner, white type, accent links.
+        return new TemplateSupport.CoverLetterStyle(
+                new TemplateSupport.Theme(
+                        ctx.nameFont, ctx.headlineFont, ctx.sectionHeaderFont,
+                        ctx.itemTitleFont, ctx.itemSubtitleFont, ctx.bodyFont, ctx.dateFont,
+                        PRIMARY_COLOR, SECONDARY_COLOR, ACCENT_COLOR,
+                        false,
+                        1.4f),
+                TemplateSupport.Letterhead.BANNER);
+    }
+
     private PdfPCell createLeftColumn(PortfolioData data, PdfGenerationService.PdfContext ctx)
             throws IOException, DocumentException {
         PdfPCell cell = new PdfPCell();

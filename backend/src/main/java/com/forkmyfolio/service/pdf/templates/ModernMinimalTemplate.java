@@ -52,6 +52,19 @@ public class ModernMinimalTemplate implements PortfolioPdfTemplate {
     }
 
     @Override
+    public TemplateSupport.CoverLetterStyle coverLetterStyle(PdfGenerationService.PdfContext ctx) {
+        // Minimal identity: Helvetica, upper-case centred letterhead, monochrome rule.
+        return new TemplateSupport.CoverLetterStyle(
+                new TemplateSupport.Theme(
+                        helveticaBold, helveticaOblique, helveticaBold, helveticaBold,
+                        helveticaOblique, helvetica, helvetica,
+                        TEXT_COLOR, SUBTLE_COLOR, ACCENT_COLOR,
+                        true,
+                        1.45f),
+                TemplateSupport.Letterhead.CENTERED);
+    }
+
+    @Override
     public void generate(Document document, PdfGenerationService.PdfContext ctx, PortfolioData data)
             throws IOException, DocumentException {
         TemplateSupport.Theme theme = new TemplateSupport.Theme(

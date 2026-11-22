@@ -52,6 +52,19 @@ public class ExecutiveTemplate implements PortfolioPdfTemplate {
     }
 
     @Override
+    public TemplateSupport.CoverLetterStyle coverLetterStyle(PdfGenerationService.PdfContext ctx) {
+        // Executive identity: all serif, letterhead centred, muted navy rule.
+        return new TemplateSupport.CoverLetterStyle(
+                new TemplateSupport.Theme(
+                        serifBold, serifItalic, serifBold, serifBold, serifItalic,
+                        serifRegular, serifRegular,
+                        TEXT_COLOR, SUBTLE_COLOR, ACCENT_COLOR,
+                        false,
+                        1.5f),
+                TemplateSupport.Letterhead.CENTERED);
+    }
+
+    @Override
     public void generate(Document document, PdfGenerationService.PdfContext ctx, PortfolioData data)
             throws IOException, DocumentException {
         TemplateSupport.Theme theme = new TemplateSupport.Theme(
