@@ -225,11 +225,13 @@ public class UserServiceImpl implements UserService {
 
         if (existingAdmin.isPresent()) {
             User admin = existingAdmin.get();
-            log.info("Admin user '{}' already exists. Ensuring roles and password are up to date.", email);
+            // Set-once bootstrap: ADMIN_PASSWORD seeds a NEW admin only. An
+            // existing admin keeps whatever password they set in the UI, so
+            // a restart can never silently revert it to the environment
+            // value (and a leaked env var cannot reset a live account).
+            log.info("Admin user '{}' already exists. Ensuring roles are present; leaving the stored password unchanged.", email);
             admin.getRoles().add(Role.ADMIN);
             admin.getRoles().add(Role.USER);
-            // Sync password with configuration
-            admin.setPassword(passwordEncoder.encode(password));
             userRepository.save(admin);
         } else {
             log.info("Admin user '{}' not found. Creating new admin user.", email);

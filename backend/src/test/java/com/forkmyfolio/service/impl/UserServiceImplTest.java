@@ -14,6 +14,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
+import java.util.HashSet;
 import java.util.Optional;
 import java.util.Set;
 
@@ -73,6 +74,26 @@ class UserServiceImplTest {
         assertTrue(newUser.isActive());
 
         verify(userRepository).save(any(User.class));
+    }
+
+    @Test
+    void createOrUpdateAdminUser_shouldNotOverwriteAnExistingPassword() {
+        // Arrange: an admin whose password was changed in the UI.
+        User admin = new User();
+        admin.setEmail("admin@example.com");
+        admin.setPassword("ui-changed-password-hash");
+        admin.setRoles(new HashSet<>(Set.of(Role.USER)));
+        when(userRepository.findByEmail("admin@example.com")).thenReturn(Optional.of(admin));
+
+        // Act
+        userService.createOrUpdateAdminUser("admin@example.com", "env-bootstrap-password", "Admin", "User");
+
+        // Assert: set-once bootstrap — the stored password survives restarts.
+        assertEquals("ui-changed-password-hash", admin.getPassword());
+        verify(passwordEncoder, never()).encode(anyString());
+        assertTrue(admin.getRoles().contains(Role.ADMIN));
+        assertTrue(admin.getRoles().contains(Role.USER));
+        verify(userRepository).save(admin);
     }
 
     @Test

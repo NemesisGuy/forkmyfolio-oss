@@ -171,11 +171,18 @@ public interface UserService {
 
     /**
      * Ensures the default administrator user exists, creating or updating it as
-     * needed
-     * based on application properties. This is an idempotent operation.
+     * needed based on application properties. This is an idempotent operation.
+     *
+     * <p>
+     * The {@code password} is a set-once bootstrap credential: it is only
+     * applied when the admin is first created. If the account already exists
+     * its stored password is left untouched, so a password changed in the UI
+     * survives restarts and the environment value cannot silently reset it.
+     * Recovery from a lost admin password therefore requires an explicit
+     * database/environment reset rather than a redeploy.
      *
      * @param email     The admin's email.
-     * @param password  The admin's raw password.
+     * @param password  The admin's raw bootstrap password.
      * @param firstName The admin's first name.
      * @param lastName  The admin's last name.
      */
