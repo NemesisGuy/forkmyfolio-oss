@@ -96,32 +96,45 @@ export const getPublicProjectById = (uuid: string): Promise<Project> => {
 
 /**
  * Downloads a public portfolio as a PDF using its slug.
+ *
+ * <p>Phase 0.26: the Authorization header is attached when a session exists.
+ * The backend still resolves OWNER only when the requester IS the portfolio
+ * owner, so visitors receive the public export and the owner receives the
+ * export shaped by their preferences (including an IN_PDF cover letter as
+ * page 1). Without the header the owner's own download silently fell back to
+ * PUBLIC and the cover-letter toggle appeared to do nothing.
  */
 export const downloadPublicPortfolioBySlug = (slug: string): Promise<Response> => {
   return fetchWithAuth<Response>(`/portfolios/${slug}/pdf`, {
     method: 'GET',
     responseType: 'raw'
-  }, false) as unknown as Promise<Response>;
+  }, true) as unknown as Promise<Response>;
 };
 
 /**
  * Downloads a public portfolio as a Markdown file.
+ *
+ * <p>The session token is attached when present (same ownership rule as the
+ * PDF download): the owner gets their own export, everyone else the public one.
  */
 export const downloadMarkdownBySlug = (slug: string): Promise<Response> => {
   return fetchWithAuth<Response>(`/portfolios/${slug}/markdown`, {
     method: 'GET',
     responseType: 'raw'
-  }, false) as unknown as Promise<Response>;
+  }, true) as unknown as Promise<Response>;
 };
 
 /**
  * Downloads a public portfolio as a vCard file.
+ *
+ * <p>The session token is attached when present (same ownership rule as the
+ * PDF download): the owner gets their own export, everyone else the public one.
  */
 export const downloadVCardBySlug = (slug: string): Promise<Response> => {
   return fetchWithAuth<Response>(`/portfolios/${slug}/vcard`, {
     method: 'GET',
     responseType: 'raw'
-  }, false) as unknown as Promise<Response>;
+  }, true) as unknown as Promise<Response>;
 };
 
 /**

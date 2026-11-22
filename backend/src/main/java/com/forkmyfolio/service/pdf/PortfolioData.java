@@ -43,7 +43,7 @@ import java.util.List;
  * Phase 0.19 (cover letter export): the record additionally carries the
  * owner's cover letter raw text ({@code coverLetterTemplate}) and the
  * resolved behaviour ({@code coverLetterMode}). {@link #includeCoverLetter()}
- * is the single gate every renderer (resume-PDF appended page + Markdown
+ * is the single gate every renderer (resume-PDF first page + Markdown
  * section) checks, so the IN_PDF path can never drift between formats.
  */
 public record PortfolioData(

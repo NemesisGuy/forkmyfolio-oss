@@ -58,6 +58,16 @@ public record ExportPreferences(
      */
     public static final String COVER_LETTER_MODE_SETTING = "export.coverletter.mode";
 
+    /**
+     * Phase 0.26 (owner decision): separate switch for PUBLIC downloads.
+     * Owner-only preferences never apply to visitors (PRV-1), so including
+     * the letter in a visitor's download is a distinct, explicit opt-in.
+     * The only public mode is {@link CoverLetterExportMode#IN_PDF};
+     * {@code SEPARATE} is meaningless for visitors (there is no public
+     * standalone endpoint) and resolves to OFF.
+     */
+    public static final String PUBLIC_COVER_LETTER_MODE_SETTING = "export.coverletter.public";
+
     /** Section keys, in canonical render order. */
     public static final Set<String> SECTION_KEYS = Set.of(
             "summary", "experience", "projects", "skills",
@@ -133,5 +143,21 @@ public record ExportPreferences(
             // the section toggles, which fail open to never lose content).
             return CoverLetterExportMode.OFF;
         }
+    }
+
+    /**
+     * Phase 0.26: parses the PUBLIC cover letter switch. FAIL-CLOSED: only
+     * {@code IN_PDF} (case/space/underscore tolerant) enables it; missing,
+     * blank, malformed, {@code OFF} and {@code SEPARATE} all resolve to
+     * OFF, so a corrupted or legacy value can never leak the letter.
+     */
+    public static CoverLetterExportMode parsePublicCoverLetterMode(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return CoverLetterExportMode.OFF;
+        }
+        String normalized = raw.trim().toUpperCase().replace('-', '_').replace(' ', '_');
+        return CoverLetterExportMode.IN_PDF.name().equals(normalized)
+                ? CoverLetterExportMode.IN_PDF
+                : CoverLetterExportMode.OFF;
     }
 }

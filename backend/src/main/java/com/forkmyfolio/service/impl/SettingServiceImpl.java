@@ -90,7 +90,10 @@ public class SettingServiceImpl implements SettingService {
         // Phase 0.19: cover letter export behaviour, OFF by default so every
         // existing export pipeline is byte-for-byte unchanged until the
         // owner opts in via this setting.
-        createSettingIfNotExists("export.coverletter.mode", "OFF", "Cover letter export for your own downloads: OFF (never exported), IN_PDF (append a cover letter page to your resume PDF and a section to your Markdown) or SEPARATE (download the cover letter as its own PDF from Data & Exports).");
+        createSettingIfNotExists("export.coverletter.mode", "OFF", "Cover letter export for your own downloads: OFF (never exported), IN_PDF (first page of your resume PDF, plus a section in your Markdown) or SEPARATE (download the cover letter as its own PDF from Data & Exports).");
+        // Phase 0.26: separate PUBLIC-download switch (owner-only preferences
+        // never apply to visitors). OFF keeps visitors' downloads resume-only.
+        createSettingIfNotExists("export.coverletter.public", "OFF", "Cover letter in PUBLIC downloads: OFF (visitors get the resume only) or IN_PDF (visitors' resume PDF starts with the cover letter, and their Markdown gains a Cover Letter section).");
         log.info("Default settings initialization complete.");
     }
 

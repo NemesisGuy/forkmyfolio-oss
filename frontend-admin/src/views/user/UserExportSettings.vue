@@ -8,7 +8,7 @@
           <h1 class="display-5 mb-4 glass-text">Export Settings</h1>
           <p class="lead glass-subtitle mb-5">
             Choose what goes into the PDF and Markdown files you download of your
-            <strong>own</strong> portfolio.
+            <strong>own</strong> portfolio — and, if you want, what visitors download.
           </p>
 
           <!-- Error State -->
@@ -23,8 +23,9 @@
             <!-- Privacy note (mirrors the Display Settings page's phrasing) -->
             <p class="text-muted small mb-4">
               <Info class="me-1" aria-hidden="true"/>
-              Public visitors always receive the public version of your portfolio — these
-              preferences only apply to your own downloads while you are logged in.
+              These preferences apply to your own downloads while you are logged in. Public
+              visitors keep receiving the public version of your portfolio; the only public
+              behaviour you can change here is the cover-letter switch in the Cover Letter card.
             </p>
 
             <!-- Export Mode -->
@@ -113,11 +114,12 @@
                     @change="isDirty = true"
                   >
                   <label class="form-check-label" for="coverletter-inpdf">
-                    <strong>Inside resume PDF</strong>
+                    <strong>First page of resume PDF</strong>
                     <p class="form-text text-muted mt-0">
-                      Your own resume download gains an appended cover letter page (and your
-                      Markdown a Cover Letter section). Public visitors' downloads are never
-                      affected.
+                      Your resume PDF starts with the cover letter (page 1); your resume
+                      follows on the next page. Your Markdown export also gains a Cover
+                      Letter section. Visitors are unaffected unless you enable the
+                      switch below.
                     </p>
                   </label>
                 </div>
@@ -133,10 +135,30 @@
                     @change="isDirty = true"
                   >
                   <label class="form-check-label" for="coverletter-separate">
-                    <strong>Separate download tile</strong>
+                    <strong>Separate PDF</strong>
                     <p class="form-text text-muted mt-0">
                       Your Data &amp; Exports page gains a Cover Letter tile that downloads the
                       letter as its own PDF. Your resume PDF and Markdown stay untouched.
+                    </p>
+                  </label>
+                </div>
+                <hr class="my-4">
+                <div class="form-check form-switch">
+                  <input
+                    id="coverletter-public"
+                    v-model="publicCoverLetterInPdf"
+                    :disabled="isSaving"
+                    class="form-check-input"
+                    role="switch"
+                    type="checkbox"
+                    @change="isDirty = true"
+                  >
+                  <label class="form-check-label" for="coverletter-public">
+                    <strong>Include in visitors' downloads</strong>
+                    <p class="form-text text-muted mt-0">
+                      When on, anyone downloading from your public portfolio gets the cover
+                      letter as page 1 of the resume PDF (and a Cover Letter section in the
+                      Markdown). Off by default — visitors get the resume only.
                     </p>
                   </label>
                 </div>
@@ -245,16 +267,19 @@ import type { AdminSetting, User } from '@/types';
  * enabled), so a user who has never configured anything sees the defaults
  * here and their exports behave exactly as before.
  *
- * Phase 0.19 — Cover Letter card: a 3-mode choice (OFF / inside resume PDF /
- * separate download tile) persisted as `export.coverletter.mode`, written in
- * Profile & Account → Cover Letter Template. OFF is the safe default and
- * PUBLIC exports never include the letter (PRV-1), which this page states
- * explicitly so the toggle semantics are never misunderstood.
+ * Phase 0.19 — Cover Letter card: a 3-mode choice (OFF / first page of the
+ * resume PDF / separate PDF) persisted as `export.coverletter.mode`, written
+ * in Profile & Account → Cover Letter Template. OFF is the safe default.
+ * Phase 0.26 — a separate "Include in visitors' downloads" switch
+ * (`export.coverletter.public`) controls PUBLIC downloads independently:
+ * owner-only preferences never apply to visitors, so exposing the letter is
+ * an explicit opt-in and OFF remains the default.
  */
 
 const MODE_SETTING = 'export.mode';
 const SECTION_PREFIX = 'export.section.';
 const COVER_LETTER_SETTING = 'export.coverletter.mode';
+const PUBLIC_COVER_LETTER_SETTING = 'export.coverletter.public';
 
 const profileSlug = computed(() => (authService.user.value as User | null)?.slug ?? '');
 
@@ -274,6 +299,9 @@ const selectedMode = ref('FULL');
 // fail-closed default; a malformed server value also renders as OFF.
 const VALID_COVER_LETTER_MODES = ['OFF', 'IN_PDF', 'SEPARATE'] as const;
 const coverLetterMode = ref('OFF');
+// Phase 0.26: separate PUBLIC switch (boolean in the UI, IN_PDF/OFF stored).
+// Off by default, so visitors keep receiving the resume-only download.
+const publicCoverLetterInPdf = ref(false);
 const isDirty = ref(false);
 
 const isLoading = ref(true);
@@ -289,6 +317,7 @@ const errorMessage = ref('');
 const serverSettings = ref<Map<string, AdminSetting>>(new Map());
 const originalMode = ref('FULL');
 const originalCoverLetterMode = ref('OFF');
+const originalPublicCoverLetterInPdf = ref(false);
 const originalSectionValues = ref<Map<string, boolean>>(new Map());
 
 // Sleep helper to guarantee minimum modal visible time, preventing UI flicker.
@@ -306,7 +335,8 @@ onMounted(async () => {
     const byName = new Map<string, AdminSetting>();
     for (const setting of userSettings) {
       if (setting.name === MODE_SETTING || setting.name.startsWith(SECTION_PREFIX)
-          || setting.name === COVER_LETTER_SETTING) {
+          || setting.name === COVER_LETTER_SETTING
+          || setting.name === PUBLIC_COVER_LETTER_SETTING) {
         byName.set(setting.name, setting);
       }
     }
@@ -325,6 +355,12 @@ onMounted(async () => {
     coverLetterMode.value = (VALID_COVER_LETTER_MODES as readonly string[]).includes(serverCoverLetterMode)
         ? serverCoverLetterMode : 'OFF';
     originalCoverLetterMode.value = coverLetterMode.value;
+
+    // Phase 0.26: public switch. Fail-closed: only IN_PDF counts as on.
+    const publicCoverLetterSetting = byName.get(PUBLIC_COVER_LETTER_SETTING);
+    publicCoverLetterInPdf.value = (publicCoverLetterSetting?.value ?? 'OFF')
+        .trim().toUpperCase() === 'IN_PDF';
+    originalPublicCoverLetterInPdf.value = publicCoverLetterInPdf.value;
 
     // Sections: server value ("false" disables; anything else enables —
     // mirroring the backend's forgiving parser), otherwise default enabled.
@@ -378,6 +414,14 @@ const handleSaveSettings = async () => {
       }
       payload.push({uuid: setting.uuid, value: coverLetterMode.value});
     }
+    // Phase 0.26: the public switch is independent of the owner's own mode.
+    if (publicCoverLetterInPdf.value !== originalPublicCoverLetterInPdf.value) {
+      const publicSetting = serverSettings.value.get(PUBLIC_COVER_LETTER_SETTING);
+      if (!publicSetting?.uuid) {
+        throw new Error("The public cover letter setting was not found for your account.");
+      }
+      payload.push({uuid: publicSetting.uuid, value: publicCoverLetterInPdf.value ? 'IN_PDF' : 'OFF'});
+    }
     for (const section of sections.value) {
       if (section.enabled !== originalSectionValues.value.get(section.key)) {
         const setting = serverSettings.value.get(SECTION_PREFIX + section.key);
@@ -424,6 +468,13 @@ const handleSaveSettings = async () => {
           ? serverCoverLetterMode : 'OFF';
       originalCoverLetterMode.value = coverLetterMode.value;
     }
+    const refreshedPublicCoverLetter = refreshedByName.get(PUBLIC_COVER_LETTER_SETTING);
+    if (refreshedPublicCoverLetter) {
+      serverSettings.value.set(PUBLIC_COVER_LETTER_SETTING, refreshedPublicCoverLetter);
+      publicCoverLetterInPdf.value =
+          (refreshedPublicCoverLetter.value ?? 'OFF').trim().toUpperCase() === 'IN_PDF';
+      originalPublicCoverLetterInPdf.value = publicCoverLetterInPdf.value;
+    }
 
     isDirty.value = false;
     showSuccessModal.value = true;
@@ -440,6 +491,7 @@ const handleSaveSettings = async () => {
 const resetChanges = () => {
   selectedMode.value = originalMode.value;
   coverLetterMode.value = originalCoverLetterMode.value;
+  publicCoverLetterInPdf.value = originalPublicCoverLetterInPdf.value;
   for (const section of sections.value) {
     section.enabled = originalSectionValues.value.get(section.key) ?? true;
   }

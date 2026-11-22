@@ -27,10 +27,12 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * <ul>
  *   <li>Default OFF: nobody can download the cover letter file, and no
  *       resume PDF / Markdown gains a cover letter.</li>
- *   <li>IN_PDF: the OWNER's resume PDF gains an appended cover letter
- *       page and the owner's Markdown gains a Cover Letter section.
- *       PUBLIC exports (guests AND other authenticated users) never
- *       contain it (PRV-1).</li>
+ *   <li>IN_PDF: the OWNER's resume PDF starts with the cover letter (page 1)
+ *       and the owner's Markdown gains a Cover Letter section.
+ *       PUBLIC exports (guests AND other authenticated users) still never
+ *       contain it unless the owner explicitly enables the separate
+ *       {@code export.coverletter.public} switch (Phase 0.26), which is
+ *       tested here as its own contract.</li>
  *   <li>SEPARATE: {@code GET /api/v1/portfolios/{slug}/cover-letter} is
  *       owner-only with optional {@code company}/{@code role} placeholder
  *       replacement. Guests, authenticated non-owners and owners in any
@@ -98,11 +100,11 @@ public class CoverLetterEndpointsIntegrationTest extends AbstractMySqlIntegratio
     }
 
     // ------------------------------------------------------------------
-    // IN_PDF: appended page + Markdown section, PUBLIC untouched
+    // IN_PDF: first page + Markdown section, PUBLIC untouched
     // ------------------------------------------------------------------
 
     @Test
-    void inPdf_ownerResumeGainsCoverLetterPage_andMarkdownSection() throws Exception {
+    void inPdf_ownerResumeStartsWithCoverLetterPage_andMarkdownSection() throws Exception {
         setMode("IN_PDF");
 
         String ownerMd = downloadMarkdown(ownerJwt);
@@ -110,9 +112,26 @@ public class CoverLetterEndpointsIntegrationTest extends AbstractMySqlIntegratio
         assertThat(ownerMd).contains(LETTER_TEXT);
         assertThat(ownerMd).contains("{{company}}"); // placeholders emitted verbatim in Markdown
 
-        String ownerPdfText = downloadPdfText(ownerJwt);
+        byte[] ownerPdf = downloadPdf(ownerJwt);
+        String ownerPdfText = extractPdfText(ownerPdf);
         assertThat(ownerPdfText).contains("Cover Letter");
         assertThat(ownerPdfText.replaceAll("\\s+", " ")).contains(LETTER_TEXT);
+
+        // Phase 0.26: the letter is page 1 and the resume follows — it is no
+        // longer appended after the resume.
+        var reader = new org.openpdf.text.pdf.PdfReader(ownerPdf);
+        try {
+            assertThat(reader.getNumberOfPages()).isGreaterThanOrEqualTo(2);
+            String pageOne = new org.openpdf.text.pdf.parser.PdfTextExtractor(reader).getTextFromPage(1);
+            assertThat(pageOne).contains("Cover Letter");
+            assertThat(pageOne.replaceAll("\\s+", " ")).contains(LETTER_TEXT);
+
+            String lastPage = new org.openpdf.text.pdf.parser.PdfTextExtractor(reader)
+                    .getTextFromPage(reader.getNumberOfPages());
+            assertThat(lastPage.replaceAll("\\s+", " ")).doesNotContain(LETTER_TEXT);
+        } finally {
+            reader.close();
+        }
     }
 
     @Test
@@ -127,6 +146,57 @@ public class CoverLetterEndpointsIntegrationTest extends AbstractMySqlIntegratio
         // Authenticated non-owner
         assertThat(downloadPdfText(attackerJwt)).doesNotContain(LETTER_TEXT);
         assertThat(downloadMarkdown(attackerJwt)).doesNotContain("## ✉️ Cover Letter");
+    }
+
+    // ------------------------------------------------------------------
+    // Phase 0.26: separate PUBLIC switch
+    // ------------------------------------------------------------------
+
+    @Test
+    void publicSwitch_includesLetterAsPageOneForVisitors() throws Exception {
+        // Owner's own mode stays OFF; the public switch is independent.
+        setMode("OFF");
+        setSetting("export.coverletter.public", "IN_PDF");
+
+        byte[] guestPdf = downloadPdf(null);
+        var reader = new org.openpdf.text.pdf.PdfReader(guestPdf);
+        try {
+            assertThat(reader.getNumberOfPages()).isGreaterThanOrEqualTo(2);
+            String pageOne = new org.openpdf.text.pdf.parser.PdfTextExtractor(reader)
+                    .getTextFromPage(1).replaceAll("\\s+", " ");
+            assertThat(pageOne).contains("Cover Letter");
+            assertThat(pageOne).contains(LETTER_TEXT);
+        } finally {
+            reader.close();
+        }
+
+        // The owner's own download still follows the owner setting (OFF).
+        assertThat(downloadPdfText(ownerJwt)).doesNotContain(LETTER_TEXT);
+
+        // Non-owner authenticated users see the same public export.
+        assertThat(downloadPdfText(attackerJwt).replaceAll("\\s+", " ")).contains(LETTER_TEXT);
+
+        // Markdown honours the same public switch.
+        assertThat(downloadMarkdown(null)).contains("## ✉️ Cover Letter");
+    }
+
+    @Test
+    void publicSwitch_offKeepsVisitorDownloadsResumeOnly() throws Exception {
+        setMode("IN_PDF");
+        setSetting("export.coverletter.public", "OFF");
+
+        assertThat(downloadPdfText(null)).doesNotContain(LETTER_TEXT);
+        assertThat(downloadMarkdown(null)).doesNotContain("## ✉️ Cover Letter");
+    }
+
+    @Test
+    void publicSwitch_separateModeFailsClosedForVisitors() throws Exception {
+        // SEPARATE has no public meaning (no public standalone endpoint):
+        // visitors must never receive the letter through that value.
+        setSetting("export.coverletter.public", "SEPARATE");
+
+        assertThat(downloadPdfText(null)).doesNotContain(LETTER_TEXT);
+        assertThat(downloadMarkdown(null)).doesNotContain("## ✉️ Cover Letter");
     }
 
     // ------------------------------------------------------------------
@@ -204,6 +274,11 @@ public class CoverLetterEndpointsIntegrationTest extends AbstractMySqlIntegratio
 
     /** PUTs export.coverletter.mode with a fresh real login (self-contained). */
     private void setMode(String mode) throws Exception {
+        setSetting("export.coverletter.mode", mode);
+    }
+
+    /** PUTs one export.* setting by name through the real /me/settings API. */
+    private void setSetting(String settingName, String value) throws Exception {
         MvcResult listResult = mockMvc.perform(get("/api/v1/me/settings")
                         .header("Authorization", "Bearer " + ownerJwt))
                 .andExpect(status().isOk())
@@ -211,12 +286,12 @@ public class CoverLetterEndpointsIntegrationTest extends AbstractMySqlIntegratio
         String body = listResult.getResponse().getContentAsString();
         @SuppressWarnings("unchecked")
         List<Map<String, Object>> matches = JsonPath.read(body,
-                "$.data[?(@.name=='export.coverletter.mode')]");
-        assertThat(matches).as("export.coverletter.mode setting present").hasSize(1);
+                "$.data[?(@.name=='" + settingName + "')]");
+        assertThat(matches).as(settingName + " setting present").hasSize(1);
 
         String payload = objectMapper.writeValueAsString(List.of(Map.of(
                 "uuid", matches.get(0).get("uuid"),
-                "value", mode)));
+                "value", value)));
         mockMvc.perform(put("/api/v1/me/settings")
                         .header("Authorization", "Bearer " + ownerJwt)
                         .contentType(MediaType.APPLICATION_JSON)
@@ -236,18 +311,21 @@ public class CoverLetterEndpointsIntegrationTest extends AbstractMySqlIntegratio
                 .getContentAsString();
     }
 
-    private String downloadPdfText(String jwt) throws Exception {
+    private byte[] downloadPdf(String jwt) throws Exception {
         var request = get("/api/v1/portfolios/{slug}/pdf", ownerSlug)
                 .param("template", "classic");
         if (jwt != null) {
             request = request.header("Authorization", "Bearer " + jwt);
         }
-        byte[] pdfBytes = mockMvc.perform(request)
+        return mockMvc.perform(request)
                 .andExpect(status().isOk())
                 .andReturn()
                 .getResponse()
                 .getContentAsByteArray();
-        return extractPdfText(pdfBytes);
+    }
+
+    private String downloadPdfText(String jwt) throws Exception {
+        return extractPdfText(downloadPdf(jwt));
     }
 
     private String extractPdfText(byte[] pdfBytes) throws Exception {

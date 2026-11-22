@@ -179,13 +179,29 @@ watch(showCoverLetterModal, (isVisible) => {
 // Vue used downloadPublicPortfolioBySlug / downloadMarkdownBySlug / downloadVCardBySlug
 // (raw-response endpoints /portfolios/{slug}/pdf|markdown|vcard). fetchRaw returns the
 // raw Response, matching the original's responseType:'raw' behavior.
+//
+// Phase 0.26: attach the session token when there is one. The backend grants
+// OWNER visibility only when the requester is the portfolio owner, so visitors
+// still get the public export while the owner's own download honours their
+// export preferences — including an IN_PDF cover letter rendered as page 1.
+// Without this header the owner's download silently resolved to PUBLIC, which
+// is why the "Inside resume PDF" toggle appeared to do nothing.
+const currentAccessToken = (): string | null => {
+  if (typeof localStorage === 'undefined') return null;
+  return localStorage.getItem('accessToken') || sessionStorage.getItem('accessToken');
+};
+
 const createDownloadHandler = (path: string, fileType: string, extension: string) => async () => {
   if (!slug) return;
   isDownloading.value = true;
   errorModalMessage.value = ''; // Clear previous errors
 
   try {
-    const response = await fetchRaw(`/portfolios/${slug}/${path}`);
+    const token = currentAccessToken();
+    const response = await fetchRaw(
+      `/portfolios/${slug}/${path}`,
+      token ? { headers: { Authorization: `Bearer ${token}` } } : undefined
+    );
     if (!response.ok) {
       throw new Error(`API error ${response.status}`);
     }

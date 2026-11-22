@@ -9,9 +9,11 @@ package com.forkmyfolio.model.enums;
  *       the standalone download endpoint answers 404. Default for every
  *       fresh/existing account, so the export pipeline's byte-for-byte
  *       behaviour is unchanged until the owner opts in.</li>
- *   <li>{@link #IN_PDF} — the owner's resume PDF gains an appended cover
- *       letter page and their Markdown export gains a Cover Letter
- *       section. Applies to OWNER exports only.</li>
+ *   <li>{@link #IN_PDF} — the owner's resume PDF starts with the cover
+ *       letter page (page 1, resume follows) and their Markdown export gains
+ *       a Cover Letter section. Applies to OWNER exports, and to PUBLIC
+ *       exports only when the separate {@code export.coverletter.public}
+ *       switch is explicitly enabled.</li>
  *   <li>{@link #SEPARATE} — a standalone cover letter PDF is downloadable
  *       by the owner from their Data &amp; Exports page. The resume PDF and
  *       Markdown are NOT modified.</li>

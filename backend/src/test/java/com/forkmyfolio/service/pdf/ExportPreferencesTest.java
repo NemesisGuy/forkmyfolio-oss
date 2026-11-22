@@ -95,6 +95,43 @@ public class ExportPreferencesTest {
         assertThat(prefs.contact()).isTrue();
     }
 
+    // ------------------------------------------------------------------
+    // Phase 0.26: PUBLIC cover letter switch (FAIL-CLOSED)
+    // ------------------------------------------------------------------
+
+    @Test
+    void publicCoverLetterMode_onlyInPdfEnables() {
+        assertThat(ExportPreferences.parsePublicCoverLetterMode("IN_PDF"))
+                .isEqualTo(CoverLetterExportMode.IN_PDF);
+        assertThat(ExportPreferences.parsePublicCoverLetterMode("in pdf"))
+                .isEqualTo(CoverLetterExportMode.IN_PDF);
+        assertThat(ExportPreferences.parsePublicCoverLetterMode(" IN-PDF "))
+                .isEqualTo(CoverLetterExportMode.IN_PDF);
+    }
+
+    @Test
+    void publicCoverLetterMode_missingOffOrSeparate_failsClosedToOff() {
+        assertThat(ExportPreferences.parsePublicCoverLetterMode(null))
+                .isEqualTo(CoverLetterExportMode.OFF);
+        for (String raw : new String[]{"", "OFF", "SEPARATE", "separate", "true", "maybe", "garbage"}) {
+            assertThat(ExportPreferences.parsePublicCoverLetterMode(raw))
+                    .as("value '%s' must resolve OFF", raw)
+                    .isEqualTo(CoverLetterExportMode.OFF);
+        }
+    }
+
+    @Test
+    void publicCoverLetterMode_isIndependentOfTheOwnerModeSetting() {
+        // An owner IN_PDF preference must never implicitly expose the letter
+        // to visitors; the PUBLIC switch is a distinct key.
+        Map<String, String> ownerOnly = Map.of("export.coverletter.mode", "IN_PDF");
+        assertThat(ExportPreferences.fromUserSettings(ownerOnly).coverLetterMode())
+                .isEqualTo(CoverLetterExportMode.IN_PDF);
+        assertThat(ExportPreferences.parsePublicCoverLetterMode(
+                ownerOnly.get(ExportPreferences.PUBLIC_COVER_LETTER_MODE_SETTING)))
+                .isEqualTo(CoverLetterExportMode.OFF);
+    }
+
     @Test
     void briefMode_andSectionToggles_parse() {
         Map<String, String> overrides = new HashMap<>();

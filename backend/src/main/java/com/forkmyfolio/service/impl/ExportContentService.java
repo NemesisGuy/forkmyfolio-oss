@@ -8,6 +8,7 @@ import com.forkmyfolio.model.Skill;
 import com.forkmyfolio.model.Testimonial;
 import com.forkmyfolio.model.User;
 import com.forkmyfolio.model.UserSetting;
+import com.forkmyfolio.model.enums.CoverLetterExportMode;
 import com.forkmyfolio.model.enums.ExportMode;
 import com.forkmyfolio.model.enums.ExportVisibility;
 import com.forkmyfolio.repository.ExperienceRepository;
@@ -51,7 +52,9 @@ import java.util.stream.Stream;
  *       the account login email). The owner's personal {@code export.*}
  *       preferences are IGNORED here — public exports must behave exactly
  *       like the public portfolio pages no matter how the owner configures
- *       their own downloads.</li>
+ *       their own downloads. The ONE exception is the separate
+ *       {@code export.coverletter.public} switch (Phase 0.26), an explicit
+ *       opt-in to include the cover letter in visitors' downloads.</li>
  *   <li>{@link ExportVisibility#OWNER} — resolved in the controller by
  *       comparing the current authenticated principal with the portfolio
  *       owner; authentication NEVER grants another user's hidden content.
@@ -106,10 +109,17 @@ public class ExportContentService {
         boolean publicView = visibility == ExportVisibility.PUBLIC;
 
         // Phase 8.3: the owner's export preferences apply ONLY to their own
-        // (OWNER) exports. PUBLIC exports ignore them entirely.
+        // (OWNER) exports. PUBLIC exports ignore them entirely — with one
+        // deliberate exception: the separate PUBLIC cover-letter switch
+        // (Phase 0.26), which the owner must opt into explicitly.
+        Map<String, String> settingOverrides = loadExportSettingOverrides(owner);
         ExportPreferences prefs = publicView
                 ? ExportPreferences.defaults()
-                : resolveOwnerPreferences(owner);
+                : ExportPreferences.fromUserSettings(settingOverrides);
+        CoverLetterExportMode coverLetterMode = publicView
+                ? ExportPreferences.parsePublicCoverLetterMode(
+                        settingOverrides.get(ExportPreferences.PUBLIC_COVER_LETTER_MODE_SETTING))
+                : prefs.coverLetterMode();
 
         List<Experience> experiences = selectSection(
                 experienceRepository.findByUserOrderByDisplayOrderAsc(owner),
@@ -193,30 +203,31 @@ public class ExportContentService {
                 prefs.contact(),
                 prefs.mode(),
                 owner.getProfileImageUrl(),
-                // Phase 0.19: the cover letter is owner-personal data. PUBLIC
-                // exports resolve to defaults() whose coverLetterMode is OFF,
-                // so visitors can never receive it (PRV-1); OWNER exports
-                // honour the owner's own export.coverletter.mode setting.
+                // Phase 0.19 / 0.26: the letter text is always attached; the
+                // resolved mode is the single gate. For OWNER exports the
+                // owner's own choice applies. PUBLIC exports resolve to
+                // IN_PDF only when the owner explicitly enabled the separate
+                // public switch, otherwise OFF — visitors never receive the
+                // letter by default (PRV-1).
                 profile.getCoverLetterTemplate(),
-                prefs.coverLetterMode());
+                coverLetterMode);
     }
 
     /**
-     * Resolves the owner's {@code export.*} UserSetting overrides into an
-     * {@link ExportPreferences}. Read via the repository (not the lazy
-     * {@code user.getUserSettings()} collection) so the owner may be a
-     * freshly fetched, settings-uninitialized entity. Missing, partial or
-     * malformed values fall back to the safe defaults inside
-     * {@link ExportPreferences#fromUserSettings(Map)}.
+     * Loads the owner's {@code export.*} UserSetting overrides. Read via the
+     * repository (not the lazy {@code user.getUserSettings()} collection) so
+     * the owner may be a freshly fetched, settings-uninitialized entity.
+     * Missing, partial or malformed values fall back to the safe defaults
+     * inside {@link ExportPreferences#fromUserSettings(Map)}.
      */
-    private ExportPreferences resolveOwnerPreferences(User owner) {
-        Map<String, String> overrides = userSettingRepository.findByUser(owner).stream()
+    private Map<String, String> loadExportSettingOverrides(User owner) {
+        return userSettingRepository.findByUser(owner).stream()
                 .filter(setting -> setting.getName() != null
                         && (ExportPreferences.MODE_SETTING.equals(setting.getName())
                                 || setting.getName().startsWith(ExportPreferences.SECTION_PREFIX)
-                                || ExportPreferences.COVER_LETTER_MODE_SETTING.equals(setting.getName())))
+                                || ExportPreferences.COVER_LETTER_MODE_SETTING.equals(setting.getName())
+                                || ExportPreferences.PUBLIC_COVER_LETTER_MODE_SETTING.equals(setting.getName())))
                 .collect(Collectors.toMap(UserSetting::getName, UserSetting::getValue));
-        return ExportPreferences.fromUserSettings(overrides);
     }
 
     /**

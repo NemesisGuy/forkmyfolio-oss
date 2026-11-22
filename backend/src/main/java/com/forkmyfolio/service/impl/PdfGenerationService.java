@@ -221,16 +221,19 @@ public class PdfGenerationService {
             }
             document.open();
             PdfContext ctx = new PdfContext();
-            template.generate(document, ctx, portfolioData);
-            // Phase 0.19: the owner may append their cover letter as a final
-            // page of their own resume download. PUBLIC exports always carry
-            // coverLetterMode OFF (PortfolioData prises it from defaults()),
-            // so visitors' downloads are byte-for-byte untouched.
-            if (visibility == ExportVisibility.OWNER && portfolioData.includeCoverLetter()) {
-                document.newPage();
+            // Phase 0.26: the IN_PDF cover letter is the FIRST page of the
+            // resume download (it was previously appended after the resume,
+            // which made the "Inside resume PDF" toggle look inert). The
+            // gate is the mode resolved by ExportContentService: for OWNER
+            // exports that is the owner's own preference; for PUBLIC exports
+            // it is the separate `export.coverletter.public` switch, OFF
+            // unless the owner explicitly opted in (PRV-1).
+            if (portfolioData.includeCoverLetter()) {
                 TemplateSupport.renderCoverLetterPage(document, coverLetterTheme(ctx),
                         portfolioData, company, role);
+                document.newPage();
             }
+            template.generate(document, ctx, portfolioData);
         } catch (IOException | DocumentException e) {
             log.error("Failed to load fonts or other resources for PDF generation. Aborting.", e);
             throw new RuntimeException("Failed to generate PDF due to a resource loading issue.", e);
