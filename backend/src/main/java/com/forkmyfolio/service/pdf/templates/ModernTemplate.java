@@ -264,22 +264,22 @@ public class ModernTemplate implements PortfolioPdfTemplate {
             addSectionToCell(cell, "Summary",
                     summaryContent(data.profile().getSummary(), ctx), ctx, firstSection);
         }
-        PdfPTable qualificationsTable = new PdfPTable(1);
-        qualificationsTable.setWidthPercentage(100);
+        // Phase 0.26 (DEF-5): each item is rendered as its OWN element instead
+        // of one section-wide nested table. OpenPDF cannot split the item rows
+        // of a nested table, so a long Experience block used to jump wholesale
+        // to the next page while its heading stayed behind — the large blank
+        // gap seen in the Modern preview. The heading is kept in the SAME
+        // unsplittable block as the first item, so it can never be stranded.
         data.qualifications().sort(Comparator.comparing(Qualification::getCompletionYear).reversed());
-        data.qualifications().forEach(qual -> qualificationsTable.addCell(createQualificationCell(qual, ctx, brief)));
-        addSectionToCell(cell, "Qualifications", qualificationsTable, ctx, firstSection);
+        addSectionWithItemsToCell(cell, "Qualifications", data.qualifications(), ctx, firstSection,
+                (target, qual) -> populateQualificationCell(target, qual, ctx, brief));
 
-        PdfPTable experienceTable = new PdfPTable(1);
-        experienceTable.setWidthPercentage(100);
         data.experiences().sort(Comparator.comparing(Experience::getStartDate).reversed());
-        data.experiences().forEach(exp -> experienceTable.addCell(createExperienceCell(exp, ctx, brief)));
-        addSectionToCell(cell, "Professional Experience", experienceTable, ctx, firstSection);
+        addSectionWithItemsToCell(cell, "Professional Experience", data.experiences(), ctx, firstSection,
+                (target, exp) -> populateExperienceCell(target, exp, ctx, brief));
 
-        PdfPTable projectsTable = new PdfPTable(1);
-        projectsTable.setWidthPercentage(100);
-        data.projects().forEach(proj -> projectsTable.addCell(createProjectCell(proj, ctx, brief)));
-        addSectionToCell(cell, "Projects", projectsTable, ctx, firstSection);
+        addSectionWithItemsToCell(cell, "Projects", data.projects(), ctx, firstSection,
+                (target, proj) -> populateProjectCell(target, proj, ctx, brief));
 
         // Phase 8.5 (DEF-4): testimonials block — this legacy template remained
         // selectable but silently omitted testimonials. Same semantics as
@@ -295,31 +295,8 @@ public class ModernTemplate implements PortfolioPdfTemplate {
                     .filter(t -> t != null && t.getQuote() != null && !t.getQuote().isBlank())
                     .collect(Collectors.toList());
             if (!renderable.isEmpty()) {
-                PdfPTable testimonialsTable = new PdfPTable(1);
-                testimonialsTable.setWidthPercentage(100);
-                for (Testimonial testimonial : renderable) {
-                    PdfPCell quoteCell = new PdfPCell();
-                    quoteCell.setBorder(Rectangle.NO_BORDER);
-                    quoteCell.setPaddingBottom(15);
-                    Paragraph quote = new Paragraph("\u201C" + testimonial.getQuote() + "\u201D",
-                            new Font(ctx.bodyFont, 10, Font.NORMAL, SECONDARY_COLOR));
-                    quote.setLeading(0, 1.4f);
-                    quote.setSpacingAfter(2);
-                    quoteCell.addElement(quote);
-                    String attribution = testimonial.getAuthorName() == null
-                            ? "" : testimonial.getAuthorName();
-                    if (testimonial.getAuthorTitle() != null && !testimonial.getAuthorTitle().isBlank()) {
-                        attribution += (attribution.isBlank() ? "" : ", ") + testimonial.getAuthorTitle();
-                    }
-                    if (!attribution.isBlank()) {
-                        Paragraph attributionLine = new Paragraph("— " + attribution,
-                                new Font(ctx.itemSubtitleFont, 9, Font.NORMAL, ACCENT_COLOR));
-                        attributionLine.setLeading(0, 1.4f);
-                        quoteCell.addElement(attributionLine);
-                    }
-                    testimonialsTable.addCell(quoteCell);
-                }
-                addSectionToCell(cell, "Testimonials", testimonialsTable, ctx, firstSection);
+                addSectionWithItemsToCell(cell, "Testimonials", renderable, ctx, firstSection,
+                        (target, testimonial) -> populateTestimonialCell(target, testimonial, ctx));
             }
         }
         return cell;
@@ -328,26 +305,124 @@ public class ModernTemplate implements PortfolioPdfTemplate {
     private void addSectionToCell(PdfPCell cell, String title, Element content,
                                   PdfGenerationService.PdfContext ctx, boolean[] firstSection)
             throws DocumentException {
-        Paragraph heading = new Paragraph(title.toUpperCase(),
-                new Font(ctx.sectionHeaderFont, 14, Font.NORMAL, ACCENT_COLOR));
-        heading.setLeading(0, 1.4f);
-        heading.setSpacingAfter(0);
-        if (!firstSection[0]) {
-            heading.setSpacingBefore(20);
-        }
-        cell.addElement(heading);
-        // Previously a border-bottom on the heading paragraph.
-        Paragraph rule = new Paragraph(0);
-        rule.add(new Chunk(new LineSeparator(1f, 100, ACCENT_COLOR, Element.ALIGN_CENTER, 0)));
-        rule.setSpacingAfter(5);
-        cell.addElement(rule);
+        addSectionHeadingToCell(cell, title, ctx, firstSection);
         if (content instanceof Paragraph paragraph) {
             paragraph.setSpacingBefore(10);
         } else if (content instanceof PdfPTable table) {
             table.setSpacingBefore(10);
         }
         cell.addElement(content);
+    }
+
+    /**
+     * Adds a section title and its accent rule, applying the 20pt top gap
+     * between sections (the first section sits flush under the banner).
+     */
+    private void addSectionHeadingToCell(PdfPCell cell, String title,
+                                         PdfGenerationService.PdfContext ctx, boolean[] firstSection) {
+        Paragraph heading = sectionHeading(title, ctx);
+        if (!firstSection[0]) {
+            heading.setSpacingBefore(20);
+        }
+        cell.addElement(heading);
+        cell.addElement(sectionRule());
         firstSection[0] = false;
+    }
+
+    @FunctionalInterface
+    private interface ItemWriter<T> {
+        void write(PdfPCell cell, T item) throws DocumentException;
+    }
+
+    /**
+     * Phase 0.26 (DEF-5): renders a section whose items are individually
+     * splittable, while keeping the heading glued to the FIRST item.
+     *
+     * <p>The heading, rule and first item share ONE table row, and every
+     * later item is a separate element. The original section-wide nested
+     * table could not split at all and jumped wholesale to the next page,
+     * leaving the half-page gap seen in the preview.
+     *
+     * <p>Splitting is deliberately ENABLED on these rows ({@code splitLate}
+     * false). An unsplittable row that is taller than the page is dropped by
+     * OpenPDF's cell layout, which silently loses a long first entry —
+     * caught by PdfGenerationServiceTest. Allowing the split keeps the
+     * heading with as much of the item as fits (so it is never stranded on an
+     * otherwise empty page) and flows the remainder onto the next page
+     * instead of discarding it.
+     */
+    private <T> void addSectionWithItemsToCell(PdfPCell cell, String title,
+                                               java.util.List<T> items,
+                                               PdfGenerationService.PdfContext ctx,
+                                               boolean[] firstSection,
+                                               ItemWriter<T> writer) throws DocumentException {
+        if (items.isEmpty()) {
+            return;
+        }
+
+        PdfPCell firstBlockCell = newItemCell();
+        if (!firstSection[0]) {
+            firstBlockCell.setPaddingTop(20);
+        }
+        firstBlockCell.addElement(sectionHeading(title, ctx));
+        firstBlockCell.addElement(sectionRule());
+        Paragraph gap = new Paragraph(" ");
+        gap.setLeading(5);
+        firstBlockCell.addElement(gap);
+        writer.write(firstBlockCell, items.get(0));
+
+        PdfPTable firstBlock = new PdfPTable(1);
+        firstBlock.setWidthPercentage(100);
+        // Split in place when the block does not fit: content is never lost,
+        // and the heading travels with the start of the first item.
+        firstBlock.setSplitRows(true);
+        firstBlock.setSplitLate(false);
+        firstBlock.addCell(firstBlockCell);
+        cell.addElement(firstBlock);
+        firstSection[0] = false;
+
+        for (int i = 1; i < items.size(); i++) {
+            PdfPCell itemCell = newItemCell();
+            writer.write(itemCell, items.get(i));
+            addSectionItemToCell(cell, itemCell);
+        }
+    }
+
+    private static PdfPCell newItemCell() {
+        PdfPCell cell = new PdfPCell();
+        cell.setBorder(Rectangle.NO_BORDER);
+        cell.setPadding(0);
+        cell.setPaddingBottom(15);
+        return cell;
+    }
+
+    private static Paragraph sectionHeading(String title, PdfGenerationService.PdfContext ctx) {
+        Paragraph heading = new Paragraph(title.toUpperCase(),
+                new Font(ctx.sectionHeaderFont, 14, Font.NORMAL, ACCENT_COLOR));
+        heading.setLeading(0, 1.4f);
+        heading.setSpacingAfter(0);
+        return heading;
+    }
+
+    private static Paragraph sectionRule() {
+        Paragraph rule = new Paragraph(0);
+        rule.add(new Chunk(new LineSeparator(1f, 100, ACCENT_COLOR, Element.ALIGN_CENTER, 0)));
+        rule.setSpacingAfter(5);
+        return rule;
+    }
+
+    /**
+     * Phase 0.26: adds one follow-up item as its own element so the column
+     * can split at item boundaries. Splitting stays enabled because an item
+     * longer than a page must flow onto the next page rather than be dropped.
+     */
+    private void addSectionItemToCell(PdfPCell cell, PdfPCell item) {
+        PdfPTable wrapper = new PdfPTable(1);
+        wrapper.setWidthPercentage(100);
+        wrapper.setSplitRows(true);
+        wrapper.setSplitLate(false);
+        wrapper.addCell(item);
+        cell.addElement(wrapper);
     }
 
     private void addContactRow(PdfPTable table, String type, String text, String reference,
@@ -450,11 +525,8 @@ public class ModernTemplate implements PortfolioPdfTemplate {
     }
 
     /** Phase 8.3: in BRIEF mode the grade line is omitted. */
-    private PdfPCell createQualificationCell(Qualification qual, PdfGenerationService.PdfContext ctx, boolean brief)
-            throws DocumentException {
-        PdfPCell cell = new PdfPCell();
-        cell.setBorder(Rectangle.NO_BORDER);
-        cell.setPaddingBottom(15);
+    private void populateQualificationCell(PdfPCell cell, Qualification qual,
+            PdfGenerationService.PdfContext ctx, boolean brief) throws DocumentException {
         PdfPTable table = new PdfPTable(new float[]{3, 1});
         table.setWidthPercentage(100);
         PdfPCell nameCell = new PdfPCell(new Paragraph(qual.getQualificationName(),
@@ -478,18 +550,14 @@ public class ModernTemplate implements PortfolioPdfTemplate {
             grade.setLeading(0, 1.4f);
             cell.addElement(grade);
         }
-        return cell;
     }
 
     /**
      * Phase 8.3: in BRIEF mode the long-form description is omitted and the
      * achievement list is capped at three.
      */
-    private PdfPCell createExperienceCell(Experience exp, PdfGenerationService.PdfContext ctx, boolean brief)
-            throws DocumentException {
-        PdfPCell cell = new PdfPCell();
-        cell.setBorder(Rectangle.NO_BORDER);
-        cell.setPaddingBottom(15);
+    private void populateExperienceCell(PdfPCell cell, Experience exp,
+            PdfGenerationService.PdfContext ctx, boolean brief) throws DocumentException {
         PdfPTable table = new PdfPTable(new float[]{3, 1});
         table.setWidthPercentage(100);
         PdfPCell titleCell = new PdfPCell(new Paragraph(exp.getJobTitle(),
@@ -537,18 +605,14 @@ public class ModernTemplate implements PortfolioPdfTemplate {
                 cell.addElement(bullet);
             }
         }
-        return cell;
     }
 
     /**
      * Phase 8.3: in BRIEF mode the long-form description is omitted and the
      * key-feature list is capped at three.
      */
-    private PdfPCell createProjectCell(Project proj, PdfGenerationService.PdfContext ctx, boolean brief)
-            throws DocumentException {
-        PdfPCell cell = new PdfPCell();
-        cell.setBorder(Rectangle.NO_BORDER);
-        cell.setPaddingBottom(15);
+    private void populateProjectCell(PdfPCell cell, Project proj,
+            PdfGenerationService.PdfContext ctx, boolean brief) throws DocumentException {
         String projectUrl = null;
         if (proj.getLiveUrl() != null && !proj.getLiveUrl().isBlank()) {
             projectUrl = proj.getLiveUrl();
@@ -602,6 +666,26 @@ public class ModernTemplate implements PortfolioPdfTemplate {
                 cell.addElement(bullet);
             }
         }
-        return cell;
+    }
+
+    /** Phase 8.5: quote + attribution block for the Testimonials section. */
+    private void populateTestimonialCell(PdfPCell cell, Testimonial testimonial,
+            PdfGenerationService.PdfContext ctx) {
+        Paragraph quote = new Paragraph("\u201C" + testimonial.getQuote() + "\u201D",
+                new Font(ctx.bodyFont, 10, Font.NORMAL, SECONDARY_COLOR));
+        quote.setLeading(0, 1.4f);
+        quote.setSpacingAfter(2);
+        cell.addElement(quote);
+        String attribution = testimonial.getAuthorName() == null
+                ? "" : testimonial.getAuthorName();
+        if (testimonial.getAuthorTitle() != null && !testimonial.getAuthorTitle().isBlank()) {
+            attribution += (attribution.isBlank() ? "" : ", ") + testimonial.getAuthorTitle();
+        }
+        if (!attribution.isBlank()) {
+            Paragraph attributionLine = new Paragraph("— " + attribution,
+                    new Font(ctx.itemSubtitleFont, 9, Font.NORMAL, ACCENT_COLOR));
+            attributionLine.setLeading(0, 1.4f);
+            cell.addElement(attributionLine);
+        }
     }
 }
