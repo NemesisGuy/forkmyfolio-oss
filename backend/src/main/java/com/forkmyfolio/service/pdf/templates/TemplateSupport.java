@@ -1,5 +1,7 @@
 package com.forkmyfolio.service.pdf.templates;
 
+import com.forkmyfolio.util.ExperienceOrdering;
+
 import com.forkmyfolio.model.Experience;
 import com.forkmyfolio.model.KeyFeature;
 import com.forkmyfolio.model.PortfolioProfile;
@@ -352,10 +354,10 @@ public final class TemplateSupport {
         }
         boolean brief = data.exportMode() == ExportMode.BRIEF;
         renderSectionHeader(doc, theme, "Experience");
-        List<Experience> experiences = new ArrayList<>(data.experiences());
-        experiences.sort(Comparator.comparing(
-                Experience::getStartDate,
-                Comparator.nullsLast(Comparator.naturalOrder())).reversed());
+        // Phase 0.29 (§G): ExperienceOrdering — pinned displayOrder slots win;
+        // position-0 entries slot in chronologically. (Was: startDate re-sort,
+        // which discarded the owner's manual ordering.)
+        List<Experience> experiences = ExperienceOrdering.sort(data.experiences());
         for (Experience exp : experiences) {
             Paragraph titleLine = new Paragraph();
             titleLine.setLeading(0, 1.4f);

@@ -21,14 +21,14 @@ const { data: portfolio, pending, error } = await useAsyncData(
   () => fetchJson(`/portfolios/${slug}`)
 );
 
-// Experiences are a computed property derived from the portfolio's experience list,
-// ported EXACTLY from the Vue source: only visible entries, sorted by startDate
-// descending (most recent first).
+// Experiences are a computed property derived from the portfolio's experience
+// list: only visible entries, ordered by the SHARED Phase 0.29 (§G) contract —
+// pinned displayOrder slots win, position-0 entries slot in chronologically.
+// (Was: a bare startDate sort, which discarded the owner's manual ordering.)
 const experiences = computed(() => {
   const rawVisible = ((portfolio.value?.experiences as any[]) || []).filter((e: any) => e.visible);
 
-  // We just need to sort the experiences by date and return them.
-  return [...rawVisible].sort((a, b) => new Date(b.startDate).getTime() - new Date(a.startDate).getTime());
+  return sortExperiences(rawVisible);
 });
 
 // SEO v3.1.2: full metadata from the same payload (TDZ — must stay below the

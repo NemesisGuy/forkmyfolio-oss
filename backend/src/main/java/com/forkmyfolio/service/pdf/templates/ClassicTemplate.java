@@ -1,5 +1,7 @@
 package com.forkmyfolio.service.pdf.templates;
 
+import com.forkmyfolio.util.ExperienceOrdering;
+
 import com.forkmyfolio.model.Experience;
 import com.forkmyfolio.model.Project;
 import com.forkmyfolio.model.Qualification;
@@ -125,8 +127,9 @@ public class ClassicTemplate implements PortfolioPdfTemplate {
 
         // 3. Experience
         createSection(document, "Experience");
-        data.experiences().sort(Comparator.comparing(Experience::getStartDate).reversed());
-        for (Experience exp : data.experiences()) {
+        // Phase 0.29 (§G): pinned order wins over startDate (see ExperienceOrdering).
+        List<Experience> experiences = ExperienceOrdering.sort(data.experiences());
+        for (Experience exp : experiences) {
             String dateStr = exp.getStartDate().format(DATE_FORMATTER) + " – " +
                     (exp.getEndDate() == null ? "Present" : exp.getEndDate().format(DATE_FORMATTER));
             // Phase 8.3: BRIEF mode omits the long-form description.

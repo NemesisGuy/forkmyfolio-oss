@@ -1,11 +1,14 @@
 package com.forkmyfolio.mapper;
 
 import com.forkmyfolio.dto.response.PortfolioDto;
+import com.forkmyfolio.model.Experience;
 import com.forkmyfolio.model.User;
 import com.forkmyfolio.model.UserSkill;
+import com.forkmyfolio.util.ExperienceOrdering;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -62,9 +65,13 @@ public class PortfolioMapper {
                 .map(project -> projectMapper.toDto(project, skillLookup))
                 .collect(Collectors.toList()));
 
-        // Experiences
-        dto.setExperiences(user.getExperiences().stream()
-                .filter(com.forkmyfolio.model.Experience::isVisible)
+        // Experiences — Phase 0.29 (§G): the raw collection is an unordered
+        // HashSet; apply the manual-pin + chronological contract BEFORE the
+        // public payload goes out so visitors see the owner's order.
+        List<Experience> visibleExperiences = user.getExperiences().stream()
+                .filter(Experience::isVisible)
+                .collect(Collectors.toList());
+        dto.setExperiences(ExperienceOrdering.sort(visibleExperiences).stream()
                 .map(experience -> experienceMapper.toDto(experience, skillLookup))
                 .collect(Collectors.toList()));
 

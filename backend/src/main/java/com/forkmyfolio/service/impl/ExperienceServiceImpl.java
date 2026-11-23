@@ -7,6 +7,7 @@ import com.forkmyfolio.model.User;
 import com.forkmyfolio.repository.ExperienceRepository;
 import com.forkmyfolio.service.ExperienceService;
 import com.forkmyfolio.service.SkillService;
+import com.forkmyfolio.util.ExperienceOrdering;
 import lombok.RequiredArgsConstructor;
 import org.hibernate.Hibernate;
 import org.springframework.cache.annotation.CacheEvict;
@@ -32,7 +33,10 @@ public class ExperienceServiceImpl implements ExperienceService {
         // We initialize the skills collection to prevent LazyInitializationException
         // later in the mapping process.
         experiences.forEach(exp -> Hibernate.initialize(exp.getSkills()));
-        return experiences;
+        // Phase 0.29 (§G): display_order ASC alone puts position-0 (automatic)
+        // entries first — apply the full manual-pin + chronological contract so
+        // every consumer of this list sees the same order.
+        return ExperienceOrdering.sort(experiences);
     }
 
     @Override

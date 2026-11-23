@@ -150,6 +150,7 @@ import LoadingModal from '@/components/common/modals/LoadingModal.vue';
 import SkillBadge from '@/components/common/SkillBadge.vue';
 import ExperienceDetailsModal from '@/components/public/ExperienceDetailsModal.vue';
 import {formatDisplayDate as formatDate} from '@/utils/dateUtils.js';
+import {sortExperiences} from '@/utils/experienceOrdering';
 import { AlertTriangle, Building2, Calendar, MapPin, Briefcase } from 'lucide-vue-next';
 import type { Portfolio, Experience, User } from '@/types';
 
@@ -171,8 +172,11 @@ const experiences = computed(() => {
 
   const rawExperiences = (portfolio.value?.experiences || []).filter((e: Experience) => e.visible);
 
-  // We just need to sort the experiences by date and return them.
-  return [...rawExperiences].sort((a, b) => new Date(b.startDate).getTime() - new Date(a.startDate).getTime());
+  // Phase 0.29 (§G): the backend payload is already in the owner's order;
+  // re-applying the SHARED contract (pinned slots win, position 0 slots in
+  // chronologically) instead of a bare startDate sort keeps this preview
+  // identical to the public Nuxt page and the exports.
+  return sortExperiences(rawExperiences);
 });
 
 // Check if the currently logged-in user is the owner of this portfolio.

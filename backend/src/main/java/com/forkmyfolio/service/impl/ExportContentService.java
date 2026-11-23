@@ -8,6 +8,7 @@ import com.forkmyfolio.model.Skill;
 import com.forkmyfolio.model.Testimonial;
 import com.forkmyfolio.model.User;
 import com.forkmyfolio.model.UserSetting;
+import com.forkmyfolio.util.ExperienceOrdering;
 import com.forkmyfolio.model.enums.CoverLetterExportMode;
 import com.forkmyfolio.model.enums.ExportMode;
 import com.forkmyfolio.model.enums.ExportVisibility;
@@ -121,10 +122,10 @@ public class ExportContentService {
                         settingOverrides.get(ExportPreferences.PUBLIC_COVER_LETTER_MODE_SETTING))
                 : prefs.coverLetterMode();
 
-        List<Experience> experiences = selectSection(
+        List<Experience> experiences = ExperienceOrdering.sort(selectSection(
                 experienceRepository.findByUserOrderByDisplayOrderAsc(owner),
                 prefs.experience(),
-                publicView, "experience", Experience::isVisible);
+                publicView, "experience", Experience::isVisible));
 
         List<Project> projects = selectSection(
                 projectRepository.findByUserOrderByDisplayOrderAsc(owner),

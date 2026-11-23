@@ -1,5 +1,7 @@
 package com.forkmyfolio.service.pdf.templates;
 
+import com.forkmyfolio.util.ExperienceOrdering;
+
 import com.forkmyfolio.model.Experience;
 import com.forkmyfolio.model.PortfolioProfile;
 import com.forkmyfolio.model.Project;
@@ -287,8 +289,8 @@ public class ModernTemplate implements PortfolioPdfTemplate {
         addSectionWithItemsToCell(cell, "Qualifications", data.qualifications(), ctx, firstSection,
                 (target, qual) -> populateQualificationCell(target, qual, ctx, brief));
 
-        data.experiences().sort(Comparator.comparing(Experience::getStartDate).reversed());
-        addSectionWithItemsToCell(cell, "Professional Experience", data.experiences(), ctx, firstSection,
+        // Phase 0.29 (§G): pinned order wins over startDate (see ExperienceOrdering).
+        addSectionWithItemsToCell(cell, "Professional Experience", ExperienceOrdering.sort(data.experiences()), ctx, firstSection,
                 (target, exp) -> populateExperienceCell(target, exp, ctx, brief));
 
         addSectionWithItemsToCell(cell, "Projects", data.projects(), ctx, firstSection,

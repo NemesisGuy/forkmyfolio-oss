@@ -1,5 +1,7 @@
 package com.forkmyfolio.service.pdf.templates;
 
+import com.forkmyfolio.util.ExperienceOrdering;
+
 import com.forkmyfolio.model.Experience;
 import com.forkmyfolio.model.PortfolioProfile;
 import com.forkmyfolio.model.Project;
@@ -290,8 +292,9 @@ public class EleganceTemplate implements PortfolioPdfTemplate {
         heading.setSpacingAfter(5);
         doc.add(heading);
 
-        experiences.sort(Comparator.comparing(Experience::getStartDate).reversed());
-        for (Experience exp : experiences) {
+        // Phase 0.29 (§G): pinned order wins over startDate (see ExperienceOrdering).
+        List<Experience> sorted = ExperienceOrdering.sort(experiences);
+        for (Experience exp : sorted) {
             String dateText = exp.getStartDate().format(DATE_FORMATTER) + " - " +
                     (exp.getEndDate() == null ? "Present" : exp.getEndDate().format(DATE_FORMATTER));
 

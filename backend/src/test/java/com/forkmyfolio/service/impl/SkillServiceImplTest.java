@@ -133,6 +133,31 @@ class SkillServiceImplTest {
         verify(skillRepository, never()).save(any(Skill.class));
     }
 
+    /**
+     * Phase 0.29 (TASKS §G) — ROOT-CAUSE regression test.
+     *
+     * <p>This method used to return the immutable {@code Set.of()} for empty
+     * input. The caller assigns the result straight onto a managed entity
+     * ({@code Experience.setSkills(...)}) and Hibernate's merge path replaces
+     * collection contents via {@code clear()} — which threw
+     * {@link UnsupportedOperationException} for an immutable set. The result
+     * was HTTP 500 on {@code PUT /me/experiences/{uuid}} for ANY experience
+     * without skills, the whole transaction rolled back, and EVERY field of
+     * that save (including a display-order/position change) was silently
+     * discarded. That is the "manual position does not persist" bug the
+     * owner reported: entries WITH skills saved fine (200), entries WITHOUT
+     * skills always failed (500) behind an error modal.
+     */
+    @Test
+    void findOrCreateSkills_emptyResultMustBeMutable_forHibernateMerge() {
+        Set<Skill> empty = skillService.findOrCreateSkills(Set.of());
+
+        assertDoesNotThrow(empty::clear,
+                "Hibernate merge calls clear() on this collection — it must be mutable");
+        assertDoesNotThrow(() -> empty.add(new Skill()),
+                "the caller assigns this set onto a managed entity — it must accept adds");
+    }
+
     @Test
     void findOrCreateSkills_producesDistinctSkillsForDistinctNames() {
         when(skillRepository.findByNameIgnoreCase(anyString())).thenReturn(Optional.empty());

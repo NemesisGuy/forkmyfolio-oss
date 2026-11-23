@@ -125,6 +125,7 @@ import ExperienceFormModal from '@/components/user/ExperienceFormModal.vue';
 import SkillBadge from '@/components/common/SkillBadge.vue';
 import VisibilityToggle from '@/components/common/VisibilityToggle.vue';
 import type { Experience, Skill, User } from '@/types';
+import { sortExperiences } from '@/utils/experienceOrdering';
 
 interface ExperienceWithLoading extends Experience {
   isVisibilityLoading?: boolean;
@@ -192,23 +193,14 @@ const fetchExperiences = async () => {
     isLoading.value = true;
     error.value = null;
     const fetched = await experiencesApi.getAll() as Experience[];
-    // FIX: Implement a more robust sorting logic. It now sorts by displayOrder first,
-    // and then by start date (newest first) as a secondary criterion. This handles the
-    // case where all display orders are 0, sorting them chronologically.
-    experiences.value = (fetched as Experience[])
-      .map(e => ({ ...e, isVisibilityLoading: false } as ExperienceWithLoading)) // Add loading state for the toggle
-      .sort((a, b) => {
-        // Primary sort: displayOrder (lower numbers first)
-        const orderA = a.displayOrder ?? 999;
-        const orderB = b.displayOrder ?? 999;
-        if (orderA !== orderB) {
-          return orderA - orderB;
-        }
-        // Secondary sort: startDate (newest first)
-        const dateA = a.startDate ? new Date(a.startDate).getTime() : 0;
-        const dateB = b.startDate ? new Date(b.startDate).getTime() : 0;
-        return dateB - dateA;
-      });
+    // Phase 0.29 (§G): single ordering contract shared with the backend —
+    // pinned displayOrder slots win; position-0 entries slot in
+    // chronologically. (Was: displayOrder ?? 999 ascending, which forced
+    // position 0 to the top and ignored the date-placement contract.)
+    experiences.value = sortExperiences(
+      (fetched as Experience[])
+        .map(e => ({ ...e, isVisibilityLoading: false } as ExperienceWithLoading)) // Add loading state for the toggle
+    );
 
   } catch (err: unknown) {
     console.error("Failed to fetch experiences:", err);

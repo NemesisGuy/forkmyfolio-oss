@@ -268,12 +268,22 @@ public class PersistenceOrderingIntegrationTest extends AbstractMySqlIntegration
         // binlog/log output yet invisible to the test.
         @Transactional(propagation = Propagation.NOT_SUPPORTED)
         void visitorStats_incrementsAreAtomic_singleRowPerRef() throws Exception {
+                // NB: the MySQL container (and its data) is shared by EVERY
+                // integration test class in this JVM, and anonymous reads of
+                // GET /portfolios/{slug} legitimately bump TOTAL_VISITS through
+                // VisitorTrackingAspect from any class that runs before this
+                // one (Phase 0.29: ExperienceOrderingIntegrationTest exercises
+                // the guest payload 4x, moving site_total to 4 and making an
+                // ABSOLUTE "count == 2" unobservable forever). Pin the DELTA —
+                // the two increments must ADD exactly 2 — instead.
+                long baseline = readTotalVisits();
+
                 // Two increments for the same (type, refId) — every public stat
                 // increment is @Async, so poll the DB until both land.
                 visitorStatsService.incrementTotalVisits();
                 visitorStatsService.incrementTotalVisits();
 
-                long count = 0;
+                long count = baseline;
                 int rows = 0;
                 long deadline = System.currentTimeMillis() + 10_000;
                 while (System.currentTimeMillis() < deadline) {
@@ -282,7 +292,7 @@ public class PersistenceOrderingIntegrationTest extends AbstractMySqlIntegration
                                         "SELECT `count` FROM visitor_stats WHERE type = 'TOTAL_VISITS' AND ref_id = 'site_total'",
                                         Long.class);
                         rows = counts.size();
-                        if (rows == 1 && counts.get(0) == 2L) {
+                        if (rows == 1 && counts.get(0) == baseline + 2) {
                                 count = counts.get(0);
                                 break;
                         }
@@ -292,8 +302,10 @@ public class PersistenceOrderingIntegrationTest extends AbstractMySqlIntegration
                                 .as("V10 unique key must keep exactly ONE row per (type, ref_id)")
                                 .isEqualTo(1);
                 org.assertj.core.api.Assertions.assertThat(count)
-                                .as("both increments must count (old read-modify-write lost updates)")
-                                .isEqualTo(2L);
+                                .as("both increments must ADD 2 on top of the shared baseline %d "
+                                                + "(old read-modify-write lost updates)",
+                                                baseline)
+                                .isEqualTo(baseline + 2);
 
                 // The unique key itself must exist in the migrated schema.
                 // NB: information_schema.STATISTICS has one row per INDEXED
@@ -304,5 +316,17 @@ public class PersistenceOrderingIntegrationTest extends AbstractMySqlIntegration
                                                 + "AND INDEX_NAME = 'uk_visitor_stats_type_ref'",
                                 Integer.class);
                 org.assertj.core.api.Assertions.assertThat(ukCount).isEqualTo(1);
+        }
+
+        /**
+         * Current TOTAL_VISITS count for the shared site-wide counter row;
+         * {@code 0} when the row has not been created yet (the upsert only
+         * inserts it on the first increment).
+         */
+        private long readTotalVisits() {
+                List<Long> counts = jdbcTemplate.queryForList(
+                                "SELECT `count` FROM visitor_stats WHERE type = 'TOTAL_VISITS' AND ref_id = 'site_total'",
+                                Long.class);
+                return counts.isEmpty() ? 0L : counts.get(0);
         }
 }

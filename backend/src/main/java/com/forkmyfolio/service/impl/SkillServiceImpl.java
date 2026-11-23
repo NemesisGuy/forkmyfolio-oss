@@ -11,6 +11,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
@@ -94,7 +95,13 @@ public class SkillServiceImpl implements SkillService {
     @Transactional
     public Set<Skill> findOrCreateSkills(Set<String> skillNames) {
         if (skillNames == null || skillNames.isEmpty()) {
-            return Set.of();
+            // MUST be mutable: the caller assigns this straight onto a managed
+            // entity (e.g. Experience.setSkills) and Hibernate's merge replaces
+            // the collection contents via clear(). Returning the immutable
+            // Set.of() here threw UnsupportedOperationException -> HTTP 500 ->
+            // full transaction rollback, so ANY edit to an experience without
+            // skills (e.g. a position change) silently failed to persist.
+            return new HashSet<>();
         }
         return skillNames.stream()
                 .filter(name -> name != null && !name.isBlank())
