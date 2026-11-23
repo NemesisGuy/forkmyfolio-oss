@@ -19,38 +19,43 @@ const levelColorClasses: Record<string, string> = {
   DEFAULT: 'text-muted',
 };
 
-const levelDefaultIcons: Record<string, string> = {
-  EXPERT: '',
-  ADVANCED: '',
-  INTERMEDIATE: '',
-  BEGINNER: '',
-  DEFAULT: '',
-};
+/**
+ * Phase 0.28 (C1): icon used when a skill carries no catalogue icon.
+ * Inline-created skills (added straight from a job experience) used to store
+ * a NULL icon, which made `getIconClass` return '' and rendered an EMPTY
+ * `<i>` — a badge with no visible icon at all. Every badge now always has
+ * something to show.
+ */
+export const DEFAULT_SKILL_ICON = 'fa-solid fa-tag';
 
 /**
  * Determines the correct CSS class for a skill's icon.
+ *
+ * Accepts a skill object or a bare name string (defensive: some callers
+ * historically passed names), and never returns an empty icon class.
  */
-export const getIconClass = (skill: Partial<Skill>): string => {
+export const getIconClass = (skill: Partial<Skill> | string | null | undefined): string => {
+  if (typeof skill === 'string') {
+    skill = {name: skill};
+  }
   if (!skill) {
-    return `${levelDefaultIcons.DEFAULT} ${levelColorClasses.DEFAULT}`;
+    return `${DEFAULT_SKILL_ICON} ${levelColorClasses.DEFAULT}`;
   }
 
   const level = skill.level;
   const colorClass = level ? (levelColorClasses[level] || levelColorClasses.DEFAULT) : '';
   let baseIconClass: string;
 
-  if (!skill.icon) {
-    baseIconClass = level ? (levelDefaultIcons[level] || levelDefaultIcons.DEFAULT) : levelDefaultIcons.DEFAULT;
+  // Blank/whitespace-only icons count as "no icon" so they fall back too.
+  const icon = (skill.icon ?? '').trim();
+  if (!icon) {
+    baseIconClass = DEFAULT_SKILL_ICON;
+  } else if (icon.startsWith('devicon-') || icon.startsWith('bi-') || icon.includes(' ')) {
+    baseIconClass = icon;
+  } else if (icon.startsWith('fa-')) {
+    baseIconClass = faBrandIcons.has(icon) ? `fa-brands ${icon}` : `fa-solid ${icon}`;
   } else {
-    if (skill.icon.startsWith('devicon-') || skill.icon.startsWith('bi-') || skill.icon.includes(' ')) {
-      baseIconClass = skill.icon;
-    }
-    else if (skill.icon.startsWith('fa-')) {
-      baseIconClass = faBrandIcons.has(skill.icon) ? `fa-brands ${skill.icon}` : `fa-solid ${skill.icon}`;
-    }
-    else {
-      baseIconClass = skill.icon;
-    }
+    baseIconClass = icon;
   }
 
   return `${baseIconClass} ${colorClass}`.trim();

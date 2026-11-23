@@ -3,9 +3,13 @@
     <!-- 1. Area for displaying selected skills -->
     <div v-if="modelValue.length > 0" class="mb-2">
       <div class="selected-skills-container p-2 border rounded">
+        <!-- Phase 0.28 (C1): selected tags carry the catalogue icon too, so a
+             picked skill looks the same before and after selection. -->
         <span v-for="skillName in modelValue" :key="skillName" class="badge skill-tag">
+          <i :class="[iconForName(skillName), 'me-1']" aria-hidden="true"></i>
           {{ skillName }}
           <button class="btn-close btn-close-white" type="button"
+                  :aria-label="`Remove ${skillName}`"
                   @click.stop="removeSkill(skillName)"></button>
         </span>
       </div>
@@ -29,13 +33,13 @@
         <div class="p-2 d-flex flex-wrap gap-2">
           <button
             v-for="skill in filteredSkills"
-            :key="skill.uuid"
+            :key="skill.uuid || skill.name"
             class="badge skill-suggestion-tag"
             type="button"
-            @mousedown.prevent="addSkill(skill.name)"
+            @mousedown.prevent="addSkill(nameOf(skill))"
           >
-            <i :class="[getIconClass(skill), 'me-2']"></i>
-            {{ skill.name }}
+            <i :class="[getIconClass(skill), 'me-2']" aria-hidden="true"></i>
+            {{ nameOf(skill) }}
           </button>
         </div>
       </div>
@@ -48,12 +52,22 @@ import {computed, ref} from 'vue';
 import {getIconClass} from '@/services/iconService.js';
 import type { Skill } from '@/types';
 
+/**
+ * Phase 0.28 (C1): callers historically passed bare skill NAMES (strings)
+ * while this component read `skill.name` / `skill.uuid` / `skill.icon`.
+ * A string has none of those, so every suggestion rendered as an EMPTY chip
+ * (no icon, no name), clicking one called `addSkill(undefined)` (a no-op) and
+ * typing in the box threw inside the filter. Accept BOTH shapes and
+ * normalize once, so the picker can never render a blank chip again.
+ */
+type SkillLike = string | Partial<Skill>;
+
 // --- Props and Emits for v-model compatibility ---
 const props = defineProps<{
-  /** This is the array of selected skill names */
+  /** The array of selected skill names */
   modelValue: string[];
-  /** This is the full list of skills to suggest from */
-  availableSkills: Skill[];
+  /** Skills to suggest: full objects (preferred) or bare names (legacy) */
+  availableSkills: SkillLike[];
 }>();
 
 const emit = defineEmits<{
@@ -65,19 +79,37 @@ const searchQuery = ref('');
 const showSuggestions = ref(false);
 const skillInputRef = ref<HTMLInputElement | null>(null);
 
+// --- Normalization helpers ---
+/** Normalizes either accepted shape into a skill object. */
+const asSkill = (raw: SkillLike): Partial<Skill> =>
+  (typeof raw === 'string' ? {name: raw} : raw ?? {});
+
+/** The display name of a normalized skill ('' when it has none). */
+const nameOf = (skill: Partial<Skill>): string => skill.name ?? '';
+
+/** Suggestions as normalized, name-bearing objects. */
+const normalizedSkills = computed<Partial<Skill>[]>(() =>
+  (props.availableSkills ?? [])
+    .map(asSkill)
+    .filter(skill => !!nameOf(skill))
+);
+
+/** Catalogue icon lookup for a bare selected name (falls back to the default). */
+const iconForName = (skillName: string): string => {
+  const match = normalizedSkills.value.find(skill => nameOf(skill) === skillName);
+  return getIconClass(match ?? {name: skillName});
+};
+
 // --- Computed Properties ---
-const filteredSkills = computed(() => {
+const filteredSkills = computed<Partial<Skill>[]>(() => {
   const selected = new Set(props.modelValue);
-  if (!searchQuery.value) {
-    // Show available skills that aren't yet selected
-    return props.availableSkills.filter(skill => !selected.has(skill.name));
+  const available = normalizedSkills.value.filter(skill => !selected.has(nameOf(skill)));
+
+  const query = searchQuery.value.trim().toLowerCase();
+  if (!query) {
+    return available;
   }
-  const query = searchQuery.value.toLowerCase();
-  // Filter skills that include the search query AND are not already selected
-  return props.availableSkills.filter(skill =>
-    !selected.has(skill.name) &&
-    skill.name.toLowerCase().includes(query)
-  );
+  return available.filter(skill => nameOf(skill).toLowerCase().includes(query));
 });
 
 // --- Methods ---
@@ -96,7 +128,11 @@ const removeSkill = (skillNameToRemove: string) => {
 
 const selectTopSuggestion = () => {
   if (filteredSkills.value.length > 0) {
-    addSkill(filteredSkills.value[0].name);
+    addSkill(nameOf(filteredSkills.value[0]));
+  } else if (searchQuery.value.trim()) {
+    // No catalogue match: treat the typed text as a free-text skill name so
+    // Enter still adds what the user typed instead of silently doing nothing.
+    addSkill(searchQuery.value.trim());
   }
 };
 
@@ -131,6 +167,11 @@ const hideSuggestions = () => {
   align-items: center;
   gap: 0.5rem;
   font-size: 0.9em;
+}
+
+.skill-tag i {
+  font-size: 1em;
+  line-height: 1;
 }
 
 .skill-tag .btn-close {

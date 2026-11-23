@@ -156,9 +156,11 @@
                   <label class="form-check-label" for="coverletter-public">
                     <strong>Include in visitors' downloads</strong>
                     <p class="form-text text-muted mt-0">
-                      When on, anyone downloading from your public portfolio gets the cover
-                      letter as page 1 of the resume PDF (and a Cover Letter section in the
-                      Markdown). Off by default — visitors get the resume only.
+                      When on, anyone downloading from your public portfolio sees the cover
+                      letter too: the <em>View Cover Letter</em> button appears on your
+                      portfolio page, their resume PDF starts with the letter, and their
+                      Markdown gains a Cover Letter section. Off by default — visitors get
+                      the resume only and no cover-letter button.
                     </p>
                   </label>
                 </div>
@@ -166,10 +168,10 @@
                   The letter is formatted as a letter — the same letterhead, fonts and colours
                   as your selected PDF template, but with a date and body text instead of
                   resume sections. The letter text lives in
-                  <router-link :to="{ name: 'profile', params: { slug: profileSlug } }">
-                    Profile &amp; Account
-                  </router-link>
-                  → Cover Letter Template. Use <code v-pre>{{company}}</code> and
+                  <router-link :to="{ name: 'edit-public-profile', params: { slug: profileSlug } }">
+                    Edit Public Profile → Cover Letter
+                  </router-link>.
+                  Use <code v-pre>{{company}}</code> and
                   <code v-pre>{{role}}</code> placeholders where recipient-specific details
                   belong.
                 </p>
@@ -528,9 +530,17 @@ const resetChanges = () => {
   color: var(--glass-text-secondary) !important;
 }
 
-.form-check-input {
+/* Phase 0.28 (A4): switch dimensions belong to CHECKBOX switches only.
+   Applying the 2.2em x 1.2em capsule to `type="radio"` inputs stretched
+   Bootstrap's circular radios into pill shapes (the "oddly-shaped radio
+   buttons" defect). Radios keep Bootstrap's own 1em circle. */
+.form-check-input[type="checkbox"] {
   width: 2.2em;
   height: 1.2em;
+  cursor: pointer;
+}
+
+.form-check-input[type="radio"] {
   cursor: pointer;
 }
 

@@ -67,19 +67,34 @@
 
         <!-- Cover Letter Card (Phase 0.19): shown only when the owner's
              export.coverletter.mode setting is SEPARATE (PRV-1: the file is
-             owner-only, so the tile must never appear otherwise). -->
+             owner-only, so the tile must never appear otherwise).
+             Phase 0.28 (A1): a SEPARATE mode with no letter text used to offer
+             a dead button that 404'd — the tile now says so and links straight
+             to the editor instead of failing on click. -->
         <div v-if="coverLetterEnabled"
              class="col-md-6 col-lg-4 animate-fade-in-up" style="animation-delay: 0.5s;">
           <div class="card h-100 glass-card interactive-card-lift interactive-card-shadow-primary">
             <div class="card-body d-flex flex-column text-center p-4">
               <div class="mb-3"><FileSignature class="display-4 text-warning" /></div>
               <h5 class="card-title glass-title">Cover Letter</h5>
-              <p class="card-text glass-subtitle small flex-grow-1">Your cover letter as its own
-                print-ready PDF, written in Profile &amp; Account.</p>
-              <button :disabled="isLoading" class="btn btn-warning mt-auto interactive-lift"
-                      @click="handleDownloadCoverLetter">
-                Download PDF
-              </button>
+              <template v-if="hasCoverLetterText">
+                <p class="card-text glass-subtitle small flex-grow-1">Your cover letter as its own
+                  print-ready PDF, written in Edit Public Profile → Cover Letter.</p>
+                <button :disabled="isLoading" class="btn btn-warning mt-auto interactive-lift"
+                        @click="handleDownloadCoverLetter">
+                  Download PDF
+                </button>
+              </template>
+              <template v-else>
+                <p class="card-text glass-subtitle small flex-grow-1">
+                  Your cover letter is switched on for a separate download, but you have not
+                  written one yet — so there is nothing to export.
+                </p>
+                <router-link :to="{ name: 'edit-public-profile', params: { slug: currentSlug } }"
+                             class="btn btn-outline-warning mt-auto interactive-lift">
+                  Write my cover letter
+                </router-link>
+              </template>
             </div>
           </div>
         </div>
@@ -97,6 +112,7 @@ import {
   downloadMarkdownBySlug,
   downloadPublicPortfolioBySlug,
   downloadVCardBySlug,
+  getMyPublicProfile,
   settingsApi
 } from '@/services/api';
 import {getFilenameFromResponse, triggerDownload} from '@/utils/downloadUtils';
@@ -121,6 +137,13 @@ const isLoading = ref(false);
  */
 const coverLetterEnabled = ref(false);
 
+/**
+ * Phase 0.28 (A1): SEPARATE mode with no letter text = a download that can
+ * only ever 404. Read the owner's own profile so the tile can say so up
+ * front (and link to the editor) instead of failing on click.
+ */
+const hasCoverLetterText = ref(true);
+
 onMounted(async () => {
   try {
     const userSettings = await settingsApi.getAll() as AdminSetting[];
@@ -131,6 +154,18 @@ onMounted(async () => {
     // three tiles are unaffected (the core download endpoints are public).
     console.warn('Could not read export settings; cover letter tile hidden.', err);
     coverLetterEnabled.value = false;
+  }
+
+  if (coverLetterEnabled.value) {
+    try {
+      const profile = await getMyPublicProfile();
+      hasCoverLetterText.value = !!profile?.coverLetterTemplate?.trim();
+    } catch (err: unknown) {
+      // Profile unreadable → keep the button (the endpoint's own 404 message
+      // still explains the failure if there really is no letter).
+      console.warn('Could not read profile; assuming a cover letter exists.', err);
+      hasCoverLetterText.value = true;
+    }
   }
 });
 

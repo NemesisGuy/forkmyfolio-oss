@@ -142,7 +142,9 @@ import type { Experience, Skill } from '@/types';
 
 const props = defineProps({
   experience: { type: Object as () => Experience | null, default: null },
-  availableSkills: { type: Array as () => string[], required: true },
+  // Phase 0.28 (C1): accepts full skill objects (preferred — carries the
+  // catalogue icon/category for the picker) or bare names (legacy callers).
+  availableSkills: { type: Array as () => Array<string | Partial<Skill>>, required: true },
 });
 const emit = defineEmits(['save']);
 

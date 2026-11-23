@@ -23,6 +23,18 @@ public class SkillServiceImpl implements SkillService {
     private final SkillRepository skillRepository;
     private final UserSkillRepository userSkillRepository;
 
+    /**
+     * Phase 0.28 (C1): category given to a skill the owner invented inline
+     * (typed straight into a job experience) so it is never category-less.
+     */
+    static final String DEFAULT_INLINE_CATEGORY = "Custom";
+
+    /**
+     * Phase 0.28 (C1): icon given to an inline-created skill so its badge
+     * always renders a visible icon (Font Awesome 6 solid puzzle piece).
+     */
+    static final String DEFAULT_INLINE_ICON = "fa-solid fa-puzzle-piece";
+
     @Override
     @Transactional(readOnly = true)
     public List<UserSkill> getAllSkillsForUser(User user) {
@@ -85,12 +97,18 @@ public class SkillServiceImpl implements SkillService {
             return Set.of();
         }
         return skillNames.stream()
-                .map(name -> skillRepository.findByName(name)
+                .filter(name -> name != null && !name.isBlank())
+                .map(String::trim)
+                .map(name -> skillRepository.findByNameIgnoreCase(name)
                         .orElseGet(() -> {
                             Skill newSkill = new Skill();
                             newSkill.setName(name);
-                            // Category and Icon would be null here, which is acceptable
-                            // as they can be updated later via a dedicated admin interface.
+                            // Phase 0.28 (C1): a skill invented inside a job experience used to be
+                            // stored NAME-ONLY, so every badge rendered with no icon and the skill
+                            // had no category. Inline-created skills now get sane defaults; skills
+                            // that already exist in the catalogue keep their own metadata.
+                            newSkill.setCategory(DEFAULT_INLINE_CATEGORY);
+                            newSkill.setIcon(DEFAULT_INLINE_ICON);
                             return skillRepository.save(newSkill);
                         }))
                 .collect(Collectors.toSet());

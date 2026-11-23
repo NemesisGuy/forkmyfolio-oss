@@ -258,4 +258,36 @@ describe('UserExportSettings.vue (Phase 8.3)', () => {
     expect(wrapper.find('form button[type="submit"]').element.disabled).toBe(true);
     expect(settingsApi.update).not.toHaveBeenCalled();
   });
+
+  // ------------------------------------------------------------------
+  // Phase 0.28 (A4): radio buttons must never be sized as switches
+  // ------------------------------------------------------------------
+
+  describe('radio shape regression guard (A4)', () => {
+    it('switch dimensions are scoped to CHECKBOX inputs only', async () => {
+      // Vite `?raw` import: the SFC source as written on disk (the <style>
+      // block is not part of the compiled component we mount above).
+      const source = (await import('./UserExportSettings.vue?raw')).default as string;
+
+      // The capsule dimensions (2.2em x 1.2em) must sit under a
+      // [type="checkbox"]-scoped selector, never a bare .form-check-input —
+      // a bare rule also hits type="radio" and stretches Bootstrap's circle
+      // into a pill (the "oddly-shaped radio buttons" defect).
+      const checkboxRule = source.match(
+        /\.form-check-input\[type=["']checkbox["']\]\s*\{[^}]*\}/
+      );
+      expect(checkboxRule, 'checkbox-scoped sizing rule present').not.toBeNull();
+      expect(checkboxRule![0]).toContain('width: 2.2em');
+      expect(checkboxRule![0]).toContain('height: 1.2em');
+
+      const bareRules = [...source.matchAll(/\.form-check-input\s*\{[^}]*\}/g)]
+        .map((m) => m[0])
+        .filter((rule) => !rule.includes('[type='));
+      const sizedBareRule = bareRules.find((rule) => /width\s*:|height\s*:/.test(rule));
+      expect(
+        sizedBareRule,
+        'no bare .form-check-input rule may set width/height (that is what made radios pill-shaped)'
+      ).toBeUndefined();
+    });
+  });
 });

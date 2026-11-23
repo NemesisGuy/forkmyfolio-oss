@@ -114,7 +114,7 @@
                          target="_blank">
                         <FileDown class="me-1" />View Resume
                       </a>
-                      <button v-if="portfolio?.profile?.coverLetterTemplate"
+                      <button v-if="showCoverLetterButton"
                               class="btn glass-btn-primary me-2 mb-2 interactive-lift"
                               @click="showCoverLetterModal = true">
                         <Mail class="me-1" />View Cover Letter
@@ -274,6 +274,9 @@ import {
 import {ApiError} from '@/services/api/ApiError.js';
 import {getFilenameFromResponse, triggerDownload} from '@/utils/downloadUtils';
 import {notificationService} from '@/services/notificationService.js';
+// Phase 0.28 (B1): public (unauthenticated) settings fetch for the
+// owner's cover-letter-for-visitors switch.
+import {fetchWithAuth} from '@/services/api/apiClient';
 
 // Modal components
 import LoadingModal from '@/components/common/modals/LoadingModal.vue';
@@ -313,6 +316,40 @@ const isAdmin = computed(() => {
 const adminSettingsTarget = computed(() => {
   const slug = adminUser.value?.slug;
   return slug ? {name: 'display-settings', params: {slug}} : {name: 'home'};
+});
+
+// Phase 0.28 (B1): mirror of the Nuxt page's gating — the public "View Cover
+// Letter" button needs BOTH the letter text AND the owner's public
+// cover-letter switch (export.coverletter.public, seeded OFF) to be on.
+// Fail closed: unreadable settings hide the button, never leak the letter.
+const publicCoverLetterEnabled = ref(false);
+
+watch(
+  () => currentSlug.value,
+  async (slug) => {
+    publicCoverLetterEnabled.value = false;
+    if (!slug) return;
+    try {
+      const data = await fetchWithAuth<unknown>(
+        `/portfolios/${slug}/settings`, {}, false);
+      const arr = Array.isArray(data) ? data : [];
+      const setting = (arr as Array<{ name?: string; value?: string }>)
+        .find((s) => s?.name === 'export.coverletter.public');
+      // Fail-closed parity with the backend and #shared/utils/coverLetter:
+      // only the literal IN_PDF lets visitors see the letter.
+      publicCoverLetterEnabled.value =
+        (setting?.value ?? '').trim().toUpperCase() === 'IN_PDF';
+    } catch (err) {
+      console.warn('[HomePage] Could not read public settings; cover letter hidden.', err);
+      publicCoverLetterEnabled.value = false;
+    }
+  },
+  { immediate: true }
+);
+
+const showCoverLetterButton = computed(() => {
+  const letter = portfolio.value?.profile?.coverLetterTemplate;
+  return !!letter && !!letter.trim() && publicCoverLetterEnabled.value;
 });
 
 // --- Local UI State ---

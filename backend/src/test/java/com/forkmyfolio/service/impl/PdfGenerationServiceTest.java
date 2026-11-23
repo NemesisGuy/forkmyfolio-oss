@@ -655,6 +655,88 @@ class PdfGenerationServiceTest {
                                 "technical template must render Skills BEFORE Experience (skills-first emphasis)");
         }
 
+        /**
+         * Phase 0.28 (A2): the bio/summary must be the FIRST resume section in
+         * EVERY registered PDF template — the owner explicitly required the
+         * ordering to be verified in every template, not only the default one.
+         *
+         * <p>
+         * Covered: modern, elegance, classic, metro-light, executive,
+         * modern-minimal, technical, plus the retired "metro-dark" preference
+         * (owners may still hold it; it aliases to metro-light). Excluded:
+         * business-card — a card-sized document that renders no resume
+         * sections at all.
+         *
+         * <p>
+         * In ModernTemplate the sidebar (Contact/Skills) precedes the main
+         * column in reading order by design; the contract asserted here is
+         * that the summary leads the main content — i.e. it renders before
+         * the first experience entry, in every template.
+         */
+        @Test
+        void generatePortfolioPdf_summaryIsFirstResumeSectionInEveryTemplate() throws Exception {
+                PortfolioProfile profile = new PortfolioProfile();
+                profile.setUser(testUser);
+                profile.setHeadline("Zymurgist For Hire");
+                profile.setSummary("A2-ORDER-MARKER: the bio must lead every template.");
+                profile.setVisible(true);
+
+                Experience exp = new Experience();
+                exp.setUser(testUser);
+                exp.setJobTitle("A2-ORDER-EXPERIENCE");
+                exp.setCompanyName("Ordering Co");
+                exp.setStartDate(java.time.LocalDate.of(2021, 1, 1));
+                exp.setEndDate(java.time.LocalDate.of(2023, 1, 1));
+                exp.setDescription("Exercises section ordering.");
+                exp.setVisible(true);
+                exp.setDisplayOrder(100);
+
+                when(userService.findBySlugWithAllPortfolioData(anyString())).thenReturn(Optional.of(testUser));
+                stubExportData(dataFor(profile, List.of(exp), Collections.emptyList(), Collections.emptyList()));
+
+                String[] templates = { "modern", "elegance", "classic", "metro-light", "executive",
+                                "modern-minimal", "technical", "metro-dark" };
+                for (String templateName : templates) {
+                        // The service resolves the template from the user's
+                        // settings (the templateName argument is ignored), so
+                        // each iteration must point the setting at that template.
+                        testUser.setUserSettings(new HashSet<>());
+                        testUser.getUserSettings()
+                                        .add(new UserSetting(testUser, "portfolio.pdf.template", templateName));
+
+                        PdfGenerationService.PdfFile pdfFile = pdfGenerationService.generatePortfolioPdf(
+                                        testUser, templateName, ExportVisibility.PUBLIC);
+                        assertNotNull(pdfFile, "PDF for template " + templateName);
+
+                        String text = extractAllPagesText(pdfFile);
+                        int summaryAt = text.indexOf("A2-ORDER-MARKER");
+                        int experienceAt = text.indexOf("A2-ORDER-EXPERIENCE");
+                        assertTrue(summaryAt >= 0,
+                                        templateName + " template must render the bio/summary section");
+                        assertTrue(experienceAt >= 0,
+                                        templateName + " template must render the experience section");
+                        assertTrue(summaryAt < experienceAt,
+                                        templateName + " template must place the bio/summary BEFORE the first "
+                                                        + "experience entry (A2: summary is the first resume section)");
+                }
+        }
+
+        /** Extracts the text of every page from a generated PDF (test helper). */
+        private String extractAllPagesText(PdfGenerationService.PdfFile pdfFile) throws Exception {
+                var reader = new org.openpdf.text.pdf.PdfReader(pdfFile.content());
+                try {
+                        StringBuilder out = new StringBuilder();
+                        for (int i = 1; i <= reader.getNumberOfPages(); i++) {
+                                out.append(new org.openpdf.text.pdf.parser.PdfTextExtractor(reader)
+                                                .getTextFromPage(i))
+                                                .append('\n');
+                        }
+                        return out.toString();
+                } finally {
+                        reader.close();
+                }
+        }
+
         /** Extracts the text of one page from a generated PDF (test helper). */
         private String extractPageText(PdfGenerationService.PdfFile pdfFile, int pageNumber) throws Exception {
                 var reader = new org.openpdf.text.pdf.PdfReader(pdfFile.content());

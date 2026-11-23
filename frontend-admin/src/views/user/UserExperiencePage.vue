@@ -26,7 +26,7 @@
       <!-- The new, self-contained form modal component -->
       <ExperienceFormModal
         ref="experienceFormModalRef"
-        :available-skills="platformSkills.map(s => s.name)"
+        :available-skills="platformSkills"
         :experience="currentExperience"
         @save="handleSaveExperience"
       />

@@ -12,6 +12,7 @@ import {
   Lock, AlertTriangle, UserCircle, FileDown, Mail, Linkedin, Github, Globe, Twitter, Link as LinkIcon,
   File, FileCode2, CheckCircle, Info,
 } from 'lucide-vue-next';
+import { canShowCoverLetterButton } from '#shared/utils/coverLetter';
 
 const route = useRoute();
 const slug = route.params.slug as string;
@@ -124,6 +125,25 @@ const toastTitle = (type?: string) => {
 const adminUser = ref<any>(null);
 const isAdmin = ref(false);
 const isOwner = ref(false);
+
+// Phase 0.28 (B1): the public "View Cover Letter" button must not appear when
+// the owner has disabled the cover letter for visitors. Gate on the owner's
+// public cover-letter switch (export.coverletter.public, seeded OFF) as well
+// as the letter text — the switch is the single "visitors may see my cover
+// letter" control, so a disabled letter is never advertised or shown.
+// Fail closed: unreadable/absent settings hide the button.
+const { settings: portfolioSettings, initialize: initializePortfolioSettings } = usePortfolioSettings();
+
+const showCoverLetterButton = computed(() =>
+  canShowCoverLetterButton(
+    portfolio.value?.profile?.coverLetterTemplate,
+    portfolioSettings.value
+  )
+);
+
+onMounted(() => {
+  initializePortfolioSettings(slug);
+});
 
 onMounted(async () => {
   try {
@@ -311,12 +331,14 @@ const retryLoad = () => {
           <p class="glass-description mb-4">
             This portfolio does not exist or is not publicly accessible.
           </p>
-          <div v-if="isAdmin" class="alert alert-info border-0 shadow-sm rounded-4 mt-3">
-            <p class="mb-2"><strong>Tip:</strong> This is your portfolio! Access is restricted because it's set to <b>Private</b>.</p>
+          <div v-if="isOwner || isAdmin" class="alert alert-info border-0 shadow-sm rounded-4 mt-3">
+            <p class="mb-2"><strong>Tip:</strong> This is your portfolio! It is hidden from
+              visitors because it is set to <b>Private</b> — nothing you write is lost, but
+              nobody can see it (and search engines will not index it) until you switch it on.</p>
             <a :href="`/${slug}/manage/settings/display`" class="btn btn-sm btn-primary rounded-pill px-3">
               Go to Settings
             </a>
-            to make it public.
+            to publish it.
           </div>
           <NuxtLink to="/" class="btn glass-btn-primary mt-3 px-4 rounded-pill">
             Return Home
@@ -343,6 +365,21 @@ const retryLoad = () => {
 
     <!-- Profile Display State: The main cover page view -->
     <div v-else-if="portfolio?.profile" class="hero-section">
+      <!-- Phase 0.28 (B3): tell the logged-in owner exactly what visitors can
+           and cannot see. Published-but-not-indexable is the silent case —
+           the page loads fine for the owner, so nothing else would ever say it. -->
+      <div v-if="isOwner && !portfolio.profile.isSearchIndexable" class="container pt-4">
+        <div class="alert alert-info border-0 shadow-sm rounded-4 d-flex flex-wrap align-items-center gap-2 justify-content-center text-center">
+          <Info class="flex-shrink-0" />
+          <span class="small">
+            Your portfolio is published, but <b>search-engine indexing is off</b> — it will not
+            appear in Google or other search results while that is the case.
+          </span>
+          <a :href="`/${slug}/manage/settings/display`" class="btn btn-sm btn-primary rounded-pill px-3">
+            Change visibility
+          </a>
+        </div>
+      </div>
       <div class="container">
         <div class="animate-fade-in-up">
           <div
@@ -375,7 +412,7 @@ const retryLoad = () => {
                          target="_blank">
                         <FileDown class="me-1" />View Resume
                       </a>
-                      <button v-if="portfolio?.profile?.coverLetterTemplate"
+                      <button v-if="showCoverLetterButton"
                               class="btn glass-btn-primary me-2 mb-2 interactive-lift"
                               @click="showCoverLetterModal = true">
                         <Mail class="me-1" />View Cover Letter

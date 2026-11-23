@@ -91,5 +91,15 @@ describe('utils/skillsUtils', () => {
       expect(getIconClass({ icon: 'fa-code', level: 'PIXIE_DUST' as Skill['level'] })).toContain('text-muted');
       expect(getIconClass(null)).toContain('text-muted');
     });
+
+    // Phase 0.28 (C1): a skill without a catalogue icon must still render a
+    // visible icon — never an empty <i> (inline-created skills store no icon).
+    it('falls back to the default icon when the skill carries none', () => {
+      expect(getIconClass({ name: 'ProbeSkillPhase028' })).toContain('fa-solid fa-tag');
+      expect(getIconClass({ name: 'X', icon: '' })).toContain('fa-solid fa-tag');
+      expect(getIconClass(null)).toContain('fa-solid fa-tag');
+      expect(getIconClass('Java')).toContain('fa-solid fa-tag');
+      expect(getIconClass({ name: 'No Icon', level: 'EXPERT' }).trim()).not.toBe('');
+    });
   });
 });

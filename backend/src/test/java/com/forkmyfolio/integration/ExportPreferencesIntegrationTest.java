@@ -344,6 +344,60 @@ public class ExportPreferencesIntegrationTest extends AbstractMySqlIntegrationTe
         assertThat(pdfText).contains(experienceTitle);
     }
 
+    // ------------------------------------------------------------------
+    // Phase 0.28 (A2): the bio / summary toggle
+    // ------------------------------------------------------------------
+
+    /**
+     * The Summary / About ("bio") section is user-configurable and must be
+     * removable from BOTH formats with {@code export.section.summary=false},
+     * without disturbing any other section.
+     */
+    @Test
+    void summaryToggle_offRemovesBioFromMarkdownAndPdf() throws Exception {
+        updateExportSettings(Map.of("export.section.summary", "false"));
+
+        String md = downloadMarkdown(ownerJwt);
+        assertThat(md).doesNotContain("Summary of " + ownerSlug);
+        assertThat(md).doesNotContain("About Me");
+        // Every other section is untouched by the bio switch.
+        assertThat(md).contains(experienceTitle);
+        assertThat(md).contains(projectTitle);
+        assertThat(md).contains(testimonialQuote);
+        assertThat(md).contains(publicEmail);
+
+        String pdfText = downloadPdfText(ownerJwt);
+        assertThat(pdfText).doesNotContain("Summary of " + ownerSlug);
+        assertThat(pdfText).contains(experienceTitle);
+    }
+
+    /**
+     * Default ON, and the bio is the FIRST content section of the resume —
+     * the owner's explicit Phase 0.28 requirement. Asserted in both formats:
+     * in Markdown the very first {@code ##} heading is About Me, and in the
+     * PDF the summary text precedes the first experience entry.
+     */
+    @Test
+    void summary_defaultOnAndFirstSectionInMarkdownAndPdf() throws Exception {
+        // Default: the seeded global setting is ON for a user who never saved.
+        String defaultMd = downloadMarkdown(ownerJwt);
+        assertThat(defaultMd).contains("Summary of " + ownerSlug);
+
+        String md = defaultMd;
+        int firstHeading = md.indexOf("\n## ");
+        assertThat(firstHeading).as("Markdown has at least one section").isGreaterThanOrEqualTo(0);
+        int aboutIdx = md.indexOf("## 📖 About Me");
+        assertThat(aboutIdx)
+                .as("the FIRST Markdown section must be the bio/summary")
+                .isEqualTo(firstHeading + 1);
+        assertThat(aboutIdx).isLessThan(md.indexOf(experienceTitle));
+
+        String pdfText = downloadPdfText(ownerJwt);
+        int summaryIdx = pdfText.indexOf("Summary of " + ownerSlug);
+        assertThat(summaryIdx).as("bio renders in the PDF").isGreaterThanOrEqualTo(0);
+        assertThat(summaryIdx).isLessThan(pdfText.indexOf(experienceTitle));
+    }
+
     @Test
     void testimonialRendering_visibleQuoteInOwnerAndPublicExports_hiddenQuoteNeverPublic() throws Exception {
         String ownerMd = downloadMarkdown(ownerJwt);
