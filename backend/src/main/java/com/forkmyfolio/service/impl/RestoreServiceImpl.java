@@ -12,11 +12,13 @@ import org.springframework.util.StringUtils;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.TreeMap;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 import java.util.Optional;
 import java.util.Collections;
 import java.util.function.Function;
@@ -59,9 +61,16 @@ public class RestoreServiceImpl implements RestoreService {
 
     @Override
     @Transactional
-    public void restoreSystemFromBackup(List<com.forkmyfolio.model.UserFullBackup> systemBackupData) {
+    public void restoreSystemFromBackup(List<com.forkmyfolio.model.UserFullBackup> systemBackupData,
+                                        List<com.forkmyfolio.model.Skill> catalogSkills) {
         log.warn("Initiating SYSTEM-WIDE restore. This is a destructive operation.");
         wipeAllData(); // Start from a clean slate
+
+        // KNOWN_ISSUES §10: rebuild the global catalogue FIRST, so the
+        // per-user restore below attaches user skills to catalogue rows
+        // (preserving uuids and admin state) instead of re-creating partial
+        // stand-ins for whatever happens to be referenced.
+        restoreSkillCatalog(catalogSkills);
 
         for (com.forkmyfolio.model.UserFullBackup userBackup : systemBackupData) {
             if (userBackup == null || userBackup.getUser() == null) {
@@ -97,6 +106,13 @@ public class RestoreServiceImpl implements RestoreService {
                 if (userFromBackup.getPassword() != null && !userFromBackup.getPassword().isBlank()) {
                     existingUser.setPassword(userFromBackup.getPassword());
                 }
+                // Backup fidelity: restore the password-change timestamp only
+                // when the backup carries one (V3+). Legacy backups have neither
+                // the hash nor the timestamp — preserving the existing value
+                // avoids forcing a password change on users who don't need one.
+                if (userFromBackup.getPasswordLastChangedAt() != null) {
+                    existingUser.setPasswordLastChangedAt(userFromBackup.getPasswordLastChangedAt());
+                }
                 restoredUser = userRepository.save(existingUser);
             }
 
@@ -104,6 +120,81 @@ public class RestoreServiceImpl implements RestoreService {
             performRestore(restoredUser, portfolioFromBackup);
         }
         log.info("System-wide restore completed.");
+    }
+
+    /**
+     * Re-inserts the global skills catalogue carried by a system backup
+     * (KNOWN_ISSUES &#167;10).
+     *
+     * <p>Previously the wipe deleted every catalogue row and only the skills
+     * that user data referenced were recreated (by name, with fresh uuids and
+     * default metadata): unreferenced catalogue rows, the catalogue-owned
+     * metadata (category, icon, description, default level) and the admin
+     * {@code visible} override were all lost — none of which a seed file can
+     * reconstruct after the fact.
+     *
+     * <p>Legacy backup files carry no catalogue ({@code null}/empty): log and
+     * skip, keeping the old on-demand behaviour for those files.
+     *
+     * <p>Matching is by uuid first (identity preserved across restore), then
+     * by case-insensitive name. An existing row keeps its identity (uuid,
+     * name) and receives the backup's catalogue-owned fields — for a system
+     * restore the backup is authoritative.
+     */
+    private void restoreSkillCatalog(List<com.forkmyfolio.model.Skill> catalogSkills) {
+        if (catalogSkills == null || catalogSkills.isEmpty()) {
+            log.info("Backup carries no skills catalogue (legacy format); "
+                    + "referenced skills will be recreated on demand during user restore.");
+            return;
+        }
+
+        // Normally empty straight after wipeAllData(); kept as a real upsert
+        // so the method stays safe against live data as well.
+        Map<UUID, Skill> byUuid = new HashMap<>();
+        Map<String, Skill> byLowerName = new HashMap<>();
+        for (Skill existing : skillRepository.findAll()) {
+            if (existing == null) {
+                continue;
+            }
+            if (existing.getUuid() != null) {
+                byUuid.put(existing.getUuid(), existing);
+            }
+            if (StringUtils.hasText(existing.getName())) {
+                byLowerName.put(existing.getName().toLowerCase(), existing);
+            }
+        }
+
+        int inserted = 0;
+        int updated = 0;
+        for (Skill incoming : catalogSkills) {
+            if (incoming == null || !StringUtils.hasText(incoming.getName())) {
+                continue;
+            }
+            Skill target = incoming.getUuid() != null ? byUuid.get(incoming.getUuid()) : null;
+            if (target == null) {
+                target = byLowerName.get(incoming.getName().toLowerCase());
+            }
+            if (target == null) {
+                if (incoming.getUuid() == null) {
+                    incoming.setUuid(UUID.randomUUID());
+                }
+                skillRepository.save(incoming);
+                inserted++;
+            } else {
+                target.setCategory(incoming.getCategory());
+                target.setDescription(incoming.getDescription());
+                target.setIcon(incoming.getIcon());
+                target.setLevel(incoming.getLevel());
+                target.setVisible(incoming.isVisible());
+                skillRepository.save(target);
+                updated++;
+            }
+        }
+        // Make the catalogue visible to the per-user restore's skill caches
+        // that run next (same transaction, explicit flush = deterministic).
+        entityManager.flush();
+        log.info("Skills catalogue restored: {} inserted, {} updated ({} entries in backup).",
+                inserted, updated, catalogSkills.size());
     }
 
     @Override

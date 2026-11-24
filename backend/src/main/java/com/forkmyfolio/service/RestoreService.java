@@ -24,12 +24,18 @@ public interface RestoreService {
     void restoreUserFromBackup(com.forkmyfolio.model.User targetUser, com.forkmyfolio.model.PortfolioBackup backupData);
 
     /**
-     * Restores the entire system from a full backup, including all users and their
-     * data. (Admin only)
+     * Restores the entire system from a full backup, including all users and
+     * their data, plus the global skills catalogue the backup carries
+     * (KNOWN_ISSUES &#167;10). (Admin only)
      *
      * @param systemBackupData A list containing the full backup data for all users.
+     * @param catalogSkills    The global skills catalogue carried by the backup;
+     *                         {@code null} or empty for legacy backup files that
+     *                         predate the catalogue (skills are then recreated on
+     *                         demand from user references, as before).
      */
-    void restoreSystemFromBackup(List<com.forkmyfolio.model.UserFullBackup> systemBackupData);
+    void restoreSystemFromBackup(List<com.forkmyfolio.model.UserFullBackup> systemBackupData,
+                                 List<com.forkmyfolio.model.Skill> catalogSkills);
 
     /**
      * Wipes all user and portfolio data from the database. This is a destructive

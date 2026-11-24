@@ -25,6 +25,9 @@ class BackupServiceImplTest {
     @Mock
     private com.forkmyfolio.repository.UserRepository userRepository;
 
+    @Mock
+    private com.forkmyfolio.repository.SkillRepository skillRepository;
+
     @InjectMocks
     private BackupServiceImpl backupService;
 
@@ -119,5 +122,24 @@ class BackupServiceImplTest {
         assertEquals(testUser, result.get(0).getUser());
         assertNotNull(result.get(0).getPortfolio());
         verify(userService).getAllUsersWithPortfolioData();
+    }
+
+    @Test
+    void getSkillCatalog_shouldReturnTheWholeCatalogue() {
+        // KNOWN_ISSUES §10: the catalogue export must NOT filter by user
+        // usage — skills no user has assigned must ride in the backup too,
+        // otherwise a restore into an empty database rebuilds only a
+        // partial catalogue.
+        Skill referenced = new Skill();
+        referenced.setName("Java");
+        Skill unreferenced = new Skill();
+        unreferenced.setName("Unreferenced Catalogue Probe");
+        when(skillRepository.findAll()).thenReturn(java.util.List.of(referenced, unreferenced));
+
+        java.util.List<Skill> result = backupService.getSkillCatalog();
+
+        assertNotNull(result);
+        assertEquals(2, result.size());
+        verify(skillRepository).findAll();
     }
 }

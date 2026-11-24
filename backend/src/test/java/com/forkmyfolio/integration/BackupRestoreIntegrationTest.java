@@ -2,10 +2,17 @@ package com.forkmyfolio.integration;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.web.servlet.MvcResult;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.forkmyfolio.model.Skill;
+import com.forkmyfolio.model.User;
+import com.forkmyfolio.model.enums.Role;
+import com.forkmyfolio.repository.SkillRepository;
+
+import java.time.Instant;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -35,6 +42,9 @@ public class BackupRestoreIntegrationTest extends AbstractMySqlIntegrationTest {
         private String jwt;
         private String projectTitle;
 
+        @Autowired
+        private SkillRepository skillRepository;
+
         @BeforeEach
         void seedUserWithContent() throws Exception {
                 String suffix = runSuffix();
@@ -57,10 +67,15 @@ public class BackupRestoreIntegrationTest extends AbstractMySqlIntegrationTest {
         }
 
         private String obtainBackupToken() throws Exception {
+                return obtainBackupToken(jwt, PASSWORD);
+        }
+
+        /** Obtains a backup-scoped token for any logged-in user (admin flows). */
+        private String obtainBackupToken(String userJwt, String password) throws Exception {
                 MvcResult result = mockMvc.perform(post("/api/v1/auth/verify-password")
-                                .header("Authorization", "Bearer " + jwt)
+                                .header("Authorization", "Bearer " + userJwt)
                                 .contentType("application/json")
-                                .content("{\"password\":\"" + PASSWORD + "\"}"))
+                                .content("{\"password\":\"" + password + "\"}"))
                                 .andExpect(status().isOk())
                                 .andExpect(jsonPath("$.data.valid").value(true))
                                 .andExpect(jsonPath("$.data.backupToken").isNotEmpty())
@@ -294,5 +309,152 @@ public class BackupRestoreIntegrationTest extends AbstractMySqlIntegrationTest {
                 assertThat(overrideSurvived)
                                 .as("the setting override must survive the restore round trip")
                                 .isTrue();
+        }
+
+        /**
+         * KNOWN_ISSUES &#167;10: a system backup must carry the GLOBAL skills
+         * catalogue, and a system restore must rebuild it exactly —
+         * unreferenced catalogue rows, catalogue-owned metadata (category,
+         * icon, description, default level) and the admin {@code visible}
+         * override all survive the round trip. Legacy (pre-catalogue) backup
+         * files must still restore, with the old on-demand skill recreation.
+         *
+         * <p>System restore is destructive by nature, so this test is
+         * self-healing: it ends by restoring the very file it downloaded,
+         * leaving users and the catalogue exactly as it found them.
+         */
+        @Test
+        void systemBackup_roundTrip_preservesGlobalSkillCatalogue() throws Exception {
+                String suffix = runSuffix();
+                String markerName = "Phase034 Catalogue Probe " + suffix;
+
+                // A dedicated admin for this test — self-contained auth, no
+                // dependence on bootstrap credentials or on other classes.
+                String adminEmail = "backup-sysadmin-" + suffix + "@example.com";
+                seedUser(adminEmail, "backup-sysadmin-" + suffix, true, Role.ADMIN);
+
+                // Backup fidelity pins (import-direction gap surfaced by the
+                // §10 UAT): a known password-change timestamp and the seeded
+                // account creation time must both survive the round trip —
+                // otherwise the UI forces a password change after restore.
+                User adminEntity = userRepository.findByEmail(adminEmail).orElseThrow();
+                adminEntity.setPasswordLastChangedAt(Instant.parse("2026-11-20T10:15:30.123456Z"));
+                userRepository.save(adminEntity);
+                adminEntity = userRepository.findByEmail(adminEmail).orElseThrow();
+                Instant originalPasswordChangedAt = adminEntity.getPasswordLastChangedAt();
+                Instant originalCreatedAt = adminEntity.getCreatedAt();
+
+                String adminJwt = realLogin(adminEmail, PASSWORD);
+
+                // A catalogue row NO user references, carrying admin state and
+                // metadata that no seed file could reconstruct after a loss.
+                Skill marker = new Skill();
+                marker.setName(markerName);
+                marker.setCategory("QA Probes");
+                marker.setIcon("icon-phase034");
+                marker.setDescription("Catalogue fidelity probe for KNOWN_ISSUES §10.");
+                marker.setVisible(false);
+                marker.setLevel(com.forkmyfolio.model.enums.SkillLevel.EXPERT);
+                skillRepository.save(marker);
+                long catalogueSize = skillRepository.count();
+
+                // 1. The download carries the whole catalogue, marker included,
+                //    with every field intact.
+                String backupToken = obtainBackupToken(adminJwt, PASSWORD);
+                MvcResult download = mockMvc.perform(get("/api/v1/admin/backup")
+                                .header("Authorization", "Bearer " + adminJwt)
+                                .header("X-Backup-Token", backupToken))
+                                .andExpect(status().isOk())
+                                .andReturn();
+                byte[] fullBackupBytes = download.getResponse().getContentAsByteArray();
+                JsonNode backupFile = objectMapper.readTree(fullBackupBytes);
+                JsonNode skills = backupFile.path("skills");
+                assertThat(skills.isArray())
+                                .as("the system backup must carry the skills catalogue")
+                                .isTrue();
+                assertThat(skills.size())
+                                .as("the catalogue must be exported in full")
+                                .isEqualTo((int) catalogueSize);
+                JsonNode markerNode = null;
+                for (JsonNode node : skills) {
+                        if (markerName.equals(node.path("name").asText())) {
+                                markerNode = node;
+                        }
+                }
+                assertThat(markerNode)
+                                .as("the unreferenced catalogue row must ride in the backup")
+                                .isNotNull();
+                assertThat(markerNode.path("uuid").asText()).isEqualTo(marker.getUuid().toString());
+                assertThat(markerNode.path("category").asText()).isEqualTo("QA Probes");
+                assertThat(markerNode.path("icon").asText()).isEqualTo("icon-phase034");
+                assertThat(markerNode.path("description").asText())
+                                .isEqualTo("Catalogue fidelity probe for KNOWN_ISSUES §10.");
+                assertThat(markerNode.path("level").asText()).isEqualTo("EXPERT");
+                assertThat(markerNode.path("visible").asBoolean())
+                                .as("the admin visible override must be exported")
+                                .isFalse();
+
+                // 2. LEGACY COMPAT: the same file with the skills array
+                //    stripped (the pre-§10 format) must still restore with 204.
+                //    Old behaviour applies — only skills user data references
+                //    come back — so the unreferenced marker stays gone.
+                com.fasterxml.jackson.databind.node.ObjectNode legacyFile = objectMapper.createObjectNode();
+                legacyFile.set("meta", backupFile.path("meta"));
+                legacyFile.set("data", backupFile.path("data"));
+                restoreSystemAsAdmin(adminJwt, objectMapper.writeValueAsBytes(legacyFile));
+                assertThat(findSkillByName(markerName))
+                                .as("legacy files carry no catalogue: the unreferenced marker is not resurrected")
+                                .isNull();
+
+                // 3. NEW FORMAT: restoring the full file rebuilds the
+                //    catalogue exactly. Fresh auth first — the restore wiped
+                //    and recreated the users, so the old JWT/token identity
+                //    no longer resolves.
+                String adminJwt2 = realLogin(adminEmail, PASSWORD);
+                restoreSystemAsAdmin(adminJwt2, fullBackupBytes);
+
+                Skill restored = findSkillByName(markerName);
+                assertThat(restored).as("the catalogue probe must be resurrected").isNotNull();
+                assertThat(restored.getUuid())
+                                .as("catalogue identity must survive the round trip")
+                                .isEqualTo(marker.getUuid());
+                assertThat(restored.getCategory()).isEqualTo("QA Probes");
+                assertThat(restored.getIcon()).isEqualTo("icon-phase034");
+                assertThat(restored.getDescription())
+                                .isEqualTo("Catalogue fidelity probe for KNOWN_ISSUES §10.");
+                assertThat(restored.getLevel())
+                                .isEqualTo(com.forkmyfolio.model.enums.SkillLevel.EXPERT);
+                assertThat(restored.isVisible())
+                                .as("the admin visible override must survive restore")
+                                .isFalse();
+                assertThat(skillRepository.count())
+                                .as("catalogue size must match the pre-restore state")
+                                .isEqualTo(catalogueSize);
+
+                // Fidelity: the restored admin keeps its password-change
+                // timestamp (no forced password change) and its original
+                // account creation time.
+                User restoredAdmin = userRepository.findByEmail(adminEmail).orElseThrow();
+                assertThat(restoredAdmin.getPasswordLastChangedAt())
+                                .as("password-change timestamp must survive restore")
+                                .isEqualTo(originalPasswordChangedAt);
+                assertThat(restoredAdmin.getCreatedAt())
+                                .as("account creation time must survive restore")
+                                .isEqualTo(originalCreatedAt);
+        }
+
+        /** Performs a full system restore as admin with fresh re-verification. */
+        private void restoreSystemAsAdmin(String adminJwt, byte[] backupBytes) throws Exception {
+                String token = obtainBackupToken(adminJwt, PASSWORD);
+                MockMultipartFile file = new MockMultipartFile(
+                                "file", "forkmyfolio-system-backup.json", "application/json", backupBytes);
+                mockMvc.perform(multipart("/api/v1/admin/backup/restore/system").file(file)
+                                .header("Authorization", "Bearer " + adminJwt)
+                                .header("X-Backup-Token", token))
+                                .andExpect(status().isNoContent());
+        }
+
+        private Skill findSkillByName(String name) {
+                return skillRepository.findByName(name).orElse(null);
         }
 }

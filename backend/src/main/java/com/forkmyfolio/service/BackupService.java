@@ -24,4 +24,13 @@ public interface BackupService {
      */
     List<com.forkmyfolio.model.UserFullBackup> createFullSystemBackup();
 
+    /**
+     * Returns the complete global skills catalogue for embedding in a system
+     * backup (KNOWN_ISSUES &#167;10). Without it a restore into an empty
+     * database only rebuilds the skills user data happens to reference.
+     *
+     * @return All catalogue skills in the system.
+     */
+    List<com.forkmyfolio.model.Skill> getSkillCatalog();
+
 }

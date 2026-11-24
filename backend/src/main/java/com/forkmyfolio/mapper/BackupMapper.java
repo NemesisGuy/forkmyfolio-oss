@@ -1,6 +1,7 @@
 package com.forkmyfolio.mapper;
 
 import com.forkmyfolio.dto.backup.BackupMetaDto;
+import com.forkmyfolio.dto.backup.SkillBackupDto;
 import com.forkmyfolio.dto.backup.UserBackupDto;
 import com.forkmyfolio.dto.response.*;
 import com.forkmyfolio.model.*;
@@ -249,5 +250,68 @@ public class BackupMapper {
                 .exportedBy(domain.getExportedBy())
                 .system(domain.getSystem())
                 .build();
+    }
+
+    // ------------------------------------------------------------------
+    // Global skills catalogue (KNOWN_ISSUES §10)
+    // ------------------------------------------------------------------
+
+    /**
+     * Converts a global catalogue {@link Skill} to its backup DTO. All
+     * catalogue-owned fields ride along — including the admin
+     * {@code visible} override, which no seed file can reconstruct.
+     */
+    public SkillBackupDto toSkillBackupDto(Skill skill) {
+        if (skill == null) {
+            return null;
+        }
+        SkillBackupDto dto = new SkillBackupDto();
+        dto.setUuid(skill.getUuid());
+        dto.setName(skill.getName());
+        dto.setCategory(skill.getCategory());
+        dto.setIcon(skill.getIcon());
+        dto.setDescription(skill.getDescription());
+        dto.setVisible(skill.isVisible());
+        dto.setLevel(skill.getLevel());
+        return dto;
+    }
+
+    public List<SkillBackupDto> toSkillBackupDtoList(List<Skill> skills) {
+        if (skills == null) {
+            return Collections.emptyList();
+        }
+        return skills.stream().filter(Objects::nonNull).map(this::toSkillBackupDto).collect(Collectors.toList());
+    }
+
+    /**
+     * Converts a backup DTO back to a catalogue {@link Skill}. The original
+     * {@code uuid} is preserved (identity across restore); the entity id is
+     * left null so persistence assigns a fresh one.
+     */
+    public Skill toSkillDomain(SkillBackupDto dto) {
+        if (dto == null) {
+            return null;
+        }
+        Skill skill = new Skill();
+        skill.setUuid(dto.getUuid());
+        skill.setName(dto.getName());
+        skill.setCategory(dto.getCategory());
+        skill.setIcon(dto.getIcon());
+        skill.setDescription(dto.getDescription());
+        skill.setVisible(dto.isVisible());
+        skill.setLevel(dto.getLevel());
+        return skill;
+    }
+
+    /**
+     * Maps the optional {@code skills} array of a system backup file.
+     * Legacy files have no such array ({@code null}) and map to an empty
+     * list — restore then skips the catalogue step entirely.
+     */
+    public List<Skill> toSkillDomainList(List<SkillBackupDto> dtos) {
+        if (dtos == null) {
+            return Collections.emptyList();
+        }
+        return dtos.stream().filter(Objects::nonNull).map(this::toSkillDomain).collect(Collectors.toList());
     }
 }

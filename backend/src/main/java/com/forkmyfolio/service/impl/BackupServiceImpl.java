@@ -16,6 +16,16 @@ public class BackupServiceImpl implements BackupService {
 
         private final UserService userService;
         private final com.forkmyfolio.repository.UserRepository userRepository;
+        private final com.forkmyfolio.repository.SkillRepository skillRepository;
+
+        @Override
+        @Transactional(readOnly = true)
+        public List<com.forkmyfolio.model.Skill> getSkillCatalog() {
+                // KNOWN_ISSUES §10: the whole catalogue, not just skills that
+                // user data references — a restore must rebuild the catalog
+                // exactly, including rows no user has assigned yet.
+                return skillRepository.findAll();
+        }
 
         @Override
         @Transactional(readOnly = true)

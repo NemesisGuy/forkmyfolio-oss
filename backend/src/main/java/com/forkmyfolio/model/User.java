@@ -4,7 +4,6 @@ import com.forkmyfolio.model.enums.AuthProvider;
 import com.forkmyfolio.model.enums.Role;
 import jakarta.persistence.*;
 import lombok.*;
-import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
@@ -188,8 +187,15 @@ public class User implements UserDetails {
 
     /**
      * Timestamp of when the user account was created.
+     *
+     * <p>Stamped manually in {@link #prePersist()} instead of via
+     * {@code @CreationTimestamp}: the backup format carries this value
+     * ({@code UserBackupDto.createdAt}) and a restore must reproduce the
+     * ORIGINAL account creation time — Hibernate's {@code @CreationTimestamp}
+     * overwrites any pre-set value on insert, which silently reset the
+     * timestamp on every system restore (found by the KNOWN_ISSUES §10 UAT).
+     * The null-guard keeps normal inserts behaving exactly as before.
      */
-    @CreationTimestamp
     @Column(nullable = false, updatable = false)
     private Instant createdAt;
 
@@ -204,6 +210,9 @@ public class User implements UserDetails {
     public void prePersist() {
         if (uuid == null) {
             uuid = UUID.randomUUID();
+        }
+        if (createdAt == null) {
+            createdAt = Instant.now();
         }
     }
 

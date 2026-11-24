@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.forkmyfolio.advice.SkipApiResponseWrapper;
 import com.forkmyfolio.dto.backup.BackupFileDto;
 import com.forkmyfolio.dto.backup.BackupMetaDto;
+import com.forkmyfolio.dto.backup.SkillBackupDto;
 import com.forkmyfolio.dto.response.PortfolioBackupDto;
 import com.forkmyfolio.dto.response.UserFullBackupDto;
 import com.forkmyfolio.model.User;
@@ -80,7 +81,7 @@ public class AdminBackupController {
     private String appVersion;
 
     @GetMapping
-    @Operation(summary = "Create a full system backup", description = "Downloads a versioned JSON file containing all data for all users in the system.")
+    @Operation(summary = "Create a full system backup", description = "Downloads a versioned JSON file containing all data for all users in the system, plus the global skills catalogue.")
     @SkipApiResponseWrapper
     public ResponseEntity<byte[]> downloadSystemBackup() throws IOException {
         log.info("Admin request for system-wide backup initiated.");
@@ -93,7 +94,13 @@ public class AdminBackupController {
         // Map to DTOs at the boundary
         List<UserFullBackupDto> systemBackupDtos = backupMapper.toDtoList(systemBackupData);
 
-        log.info("Successfully generated backup data for {} users.", systemBackupDtos.size());
+        // KNOWN_ISSUES §10: the global skills catalogue rides in the file so a
+        // restore into an empty database rebuilds the catalog exactly.
+        List<com.forkmyfolio.model.Skill> catalog = backupService.getSkillCatalog();
+        List<SkillBackupDto> catalogDtos = backupMapper.toSkillBackupDtoList(catalog);
+
+        log.info("Successfully generated backup data for {} users and {} catalogue skills.",
+                systemBackupDtos.size(), catalogDtos.size());
 
         BackupMetaDto meta = BackupMetaDto.builder()
                 .version(appVersion)
@@ -106,7 +113,7 @@ public class AdminBackupController {
                 .system("ForkMyFolio")
                 .build();
 
-        BackupFileDto<List<UserFullBackupDto>> backupFile = new BackupFileDto<>(meta, systemBackupDtos);
+        BackupFileDto<List<UserFullBackupDto>> backupFile = new BackupFileDto<>(meta, systemBackupDtos, catalogDtos);
 
         String filename = String.format("forkmyfolio-system-backup-%s.json",
                 LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE));
@@ -137,10 +144,14 @@ public class AdminBackupController {
         // Map to domain at the boundary
         requireBackupReVerification(userService.getCurrentAuthenticatedUser());
         List<UserFullBackup> domainBackup = backupMapper.toDomainList(backupFile.getData());
+        // Legacy files carry no catalogue: toSkillDomainList(null) -> empty
+        // list, and the restore skips the catalogue step (old behaviour).
+        List<com.forkmyfolio.model.Skill> catalogSkills = backupMapper.toSkillDomainList(backupFile.getSkills());
 
-        restoreService.restoreSystemFromBackup(domainBackup);
+        restoreService.restoreSystemFromBackup(domainBackup, catalogSkills);
 
-        log.warn("System restore completed successfully. {} users restored.", backupFile.getData().size());
+        log.warn("System restore completed successfully. {} users and {} catalogue skills restored.",
+                backupFile.getData().size(), catalogSkills.size());
         return ResponseEntity.noContent().build();
     }
 

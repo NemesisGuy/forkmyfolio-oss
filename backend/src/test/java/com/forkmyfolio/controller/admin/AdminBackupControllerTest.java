@@ -28,6 +28,7 @@ import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @ExtendWith(MockitoExtension.class)
@@ -73,13 +74,24 @@ class AdminBackupControllerTest {
                 when(backupService.createFullSystemBackup()).thenReturn(Collections.singletonList(backupDomain));
                 when(backupMapper.toDtoList(anyList())).thenReturn(Collections.singletonList(backupDto));
 
+                // KNOWN_ISSUES §10: the global skills catalogue rides in the file
+                com.forkmyfolio.model.Skill catalogueSkill = new com.forkmyfolio.model.Skill();
+                catalogueSkill.setName("Java");
+                com.forkmyfolio.dto.backup.SkillBackupDto catalogueDto = new com.forkmyfolio.dto.backup.SkillBackupDto();
+                catalogueDto.setName("Java");
+                when(backupService.getSkillCatalog()).thenReturn(Collections.singletonList(catalogueSkill));
+                when(backupMapper.toSkillBackupDtoList(anyList()))
+                                .thenReturn(Collections.singletonList(catalogueDto));
+
                 mockMvc.perform(get("/api/v1/admin/backup").header("X-Backup-Token", "test-backup-token"))
                                 .andExpect(status().isOk())
                                 .andExpect(header().string("Content-Type", "application/json"))
                                 .andExpect(header().string("Content-Disposition",
-                                                containsString("forkmyfolio-system-backup-")));
+                                                containsString("forkmyfolio-system-backup-")))
+                                .andExpect(jsonPath("$.skills[0].name").value("Java"));
 
                 verify(backupService).createFullSystemBackup();
+                verify(backupService).getSkillCatalog();
         }
 
         @Test
@@ -92,13 +104,50 @@ class AdminBackupControllerTest {
                                 .thenReturn(new com.forkmyfolio.model.BackupMetadata());
                 when(backupMapper.toDomainList(anyList())).thenReturn(Collections.emptyList());
                 doNothing().when(backupValidationService).validateBackup(any(), eq("system_backup"));
-                doNothing().when(restoreService).restoreSystemFromBackup(any());
+                doNothing().when(restoreService).restoreSystemFromBackup(any(), any());
 
                 mockMvc.perform(multipart("/api/v1/admin/backup/restore/system").file(file)
                                 .header("X-Backup-Token", "test-backup-token"))
                                 .andExpect(status().isNoContent());
 
-                verify(restoreService, times(1)).restoreSystemFromBackup(any());
+                // Legacy file (no skills array): catalogue argument is empty,
+                // never null, and the restore still runs.
+                verify(restoreService, times(1)).restoreSystemFromBackup(anyList(), anyList());
+        }
+
+        @Test
+        void restoreSystemFromBackup_withCatalogueArray_passesCatalogueToService() throws Exception {
+                // KNOWN_ISSUES §10: the file's skills array must deserialize
+                // into the backup DTO over real Jackson and reach the restore
+                // service as domain skills (boundary mapping pin).
+                String jsonContent = """
+                                {"meta":{"version":"2.0.0","type":"system_backup"},
+                                 "data":[],
+                                 "skills":[{"uuid":"11111111-2222-3333-4444-555555555555",
+                                            "name":"Java","category":"Backend",
+                                            "icon":"devicon-java-plain","description":"Global Java docs",
+                                            "visible":false,"level":"EXPERT"}]}
+                                """;
+                MockMultipartFile file = new MockMultipartFile("file", "backup.json", MediaType.APPLICATION_JSON_VALUE,
+                                jsonContent.getBytes(StandardCharsets.UTF_8));
+
+                com.forkmyfolio.model.Skill mappedSkill = new com.forkmyfolio.model.Skill();
+                mappedSkill.setName("Java");
+
+                when(backupMapper.toDomain(any(com.forkmyfolio.dto.backup.BackupMetaDto.class)))
+                                .thenReturn(new com.forkmyfolio.model.BackupMetadata());
+                when(backupMapper.toDomainList(anyList())).thenReturn(Collections.emptyList());
+                when(backupMapper.toSkillDomainList(anyList()))
+                                .thenReturn(Collections.singletonList(mappedSkill));
+                doNothing().when(backupValidationService).validateBackup(any(), eq("system_backup"));
+                doNothing().when(restoreService).restoreSystemFromBackup(any(), any());
+
+                mockMvc.perform(multipart("/api/v1/admin/backup/restore/system").file(file)
+                                .header("X-Backup-Token", "test-backup-token"))
+                                .andExpect(status().isNoContent());
+
+                verify(restoreService, times(1)).restoreSystemFromBackup(anyList(),
+                                eq(Collections.singletonList(mappedSkill)));
         }
 
         @Test

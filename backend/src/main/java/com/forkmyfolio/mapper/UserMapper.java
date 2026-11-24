@@ -116,6 +116,16 @@ public class UserMapper {
         user.setProviderId(dto.getProviderId());
         user.setTermsAcceptedAt(dto.getTermsAcceptedAt());
         user.setTermsVersion(dto.getTermsVersion());
+        // Backup fidelity: without these the restore silently resets the
+        // account timestamps — most visibly passwordLastChangedAt, which the
+        // frontend reads as `!user.passwordLastChangedAt` and uses to FORCE a
+        // password change on every login after a system restore (surfaced by
+        // the KNOWN_ISSUES §10 UAT). createdAt is only applied when the
+        // backup carries it (legacy files don't).
+        user.setPasswordLastChangedAt(dto.getPasswordLastChangedAt());
+        if (dto.getCreatedAt() != null) {
+            user.setCreatedAt(dto.getCreatedAt());
+        }
         if (dto.getPasswordHash() != null && !dto.getPasswordHash().isBlank()) {
             user.setPassword(dto.getPasswordHash());
         }
