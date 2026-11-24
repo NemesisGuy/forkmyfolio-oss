@@ -20,6 +20,17 @@ import java.util.*;
  * Responsible for seeding the global 'skills' table from all JSON files
  * found in the 'data/skills/' directory at application startup.
  * This is the single source of truth for initial skill data.
+ *
+ * <p>Phase 0.30 (TASKS C2): the loader is an UPSERT, not insert-only.
+ * Names that are not yet in the database are inserted; names that already
+ * exist get their catalogue-owned fields ({@code category},
+ * {@code description}, {@code icon}, {@code level}) refreshed from the JSON,
+ * so catalogue fixes (wrong category, missing description, dead icon) heal
+ * existing rows — including ad-hoc "Custom" rows created before a skill
+ * existed in the catalogue. Identity ({@code name}, {@code uuid}), the
+ * admin {@code visible} override, and all user-owned data (per-user
+ * {@code UserSkill} level/description/visible, project/experience links)
+ * are never touched.
  */
 @Component
 @RequiredArgsConstructor
@@ -70,31 +81,83 @@ public class SkillDataLoader {
                 }
             });
 
-            // Get existing skills from DB to avoid duplicates
-            List<Skill> existingSkills = skillRepository.findAll();
-            Set<String> existingNames = new HashSet<>();
-            existingSkills.forEach(s -> existingNames.add(s.getName().toLowerCase()));
-
-            List<Skill> skillsToSave = new ArrayList<>();
-            for (Map.Entry<String, Skill> entry : incomingSkillsMap.entrySet()) {
-                if (!existingNames.contains(entry.getKey())) {
-                    Skill newSkill = entry.getValue();
-                    if (newSkill.getUuid() == null) {
-                        newSkill.setUuid(UUID.randomUUID());
-                    }
-                    skillsToSave.add(newSkill);
+            // Phase 0.30 (TASKS C2): upsert keyed by lower-cased name.
+            // - Missing name  -> insert (uuid assigned by the entity hook on save).
+            // - Existing name -> refresh ONLY the catalogue-owned fields so that
+            //   corrected categories/descriptions/icons heal old rows. Name,
+            //   uuid, visible (admin override) and created_at stay untouched.
+            Map<String, Skill> existingByName = new HashMap<>();
+            for (Skill existing : skillRepository.findAll()) {
+                if (existing != null && existing.getName() != null) {
+                    existingByName.put(existing.getName().toLowerCase(), existing);
                 }
             }
 
-            if (!skillsToSave.isEmpty()) {
-                skillRepository.saveAll(skillsToSave);
-                log.info("Successfully added {} new global skills to the database.", skillsToSave.size());
-            } else {
-                log.info("No new global skills found to update.");
+            int inserted = 0;
+            int updated = 0;
+            List<Skill> toInsert = new ArrayList<>();
+            List<Skill> toUpdate = new ArrayList<>();
+            for (Map.Entry<String, Skill> entry : incomingSkillsMap.entrySet()) {
+                Skill incoming = entry.getValue();
+                Skill existing = existingByName.get(entry.getKey());
+                if (existing == null) {
+                    if (incoming.getUuid() == null) {
+                        incoming.setUuid(UUID.randomUUID());
+                    }
+                    toInsert.add(incoming);
+                    continue;
+                }
+
+                boolean changed = false;
+                changed |= applyIfPresent(incoming.getCategory(), existing.getCategory(),
+                        existing::setCategory);
+                changed |= applyIfPresent(incoming.getDescription(), existing.getDescription(),
+                        existing::setDescription);
+                changed |= applyIfPresent(incoming.getIcon(), existing.getIcon(),
+                        existing::setIcon);
+                changed |= applyIfPresent(incoming.getLevel(), existing.getLevel(),
+                        existing::setLevel);
+                if (changed) {
+                    toUpdate.add(existing);
+                }
             }
+
+            if (!toInsert.isEmpty()) {
+                skillRepository.saveAll(toInsert);
+                inserted = toInsert.size();
+            }
+            if (!toUpdate.isEmpty()) {
+                skillRepository.saveAll(toUpdate);
+                updated = toUpdate.size();
+            }
+
+            log.info("Skill catalogue sync: {} inserted, {} refreshed, {} unchanged ({} in JSON).",
+                    inserted, updated, incomingSkillsMap.size() - inserted - updated,
+                    incomingSkillsMap.size());
 
         } catch (Exception e) {
             log.error("An unexpected error occurred during the skill loading process.", e);
         }
+    }
+
+    /**
+     * Copies {@code incoming} onto the existing value only when the catalogue
+     * carries a real value that differs. {@code null} and blank strings never
+     * overwrite stored data (a sparse JSON file must not blank the DB).
+     *
+     * @return true if the existing value changed
+     */
+    <T> boolean applyIfPresent(T incoming, T current, java.util.function.Consumer<T> setter) {
+        if (incoming == null) {
+            return false;
+        }
+        if (incoming instanceof String s && s.isBlank()) {
+            return false;
+        }
+        if (incoming.equals(current)) {
+            return false;
+        }
+        setter.accept(incoming);
+        return true;
     }
 }

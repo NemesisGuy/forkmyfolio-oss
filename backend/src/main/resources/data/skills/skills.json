@@ -204,7 +204,7 @@
     "level": "BEGINNER",
     "category": "Programming Language",
     "description": "Modern language for Android and backend development.",
-    "icon": "fa-brands fa-kotlin",
+    "icon": "fa-solid fa-code",
     "visible": true
   },
   {
@@ -500,7 +500,7 @@
     "level": "BEGINNER",
     "category": "Methodology",
     "description": "Workflow visualization for optimizing task management.",
-    "icon": "fa-solid fa-board",
+    "icon": "fa-solid fa-columns",
     "visible": true
   },
   {
@@ -1474,7 +1474,7 @@
   {
     "name": "SEO",
     "level": "BEGINNER",
-    "category": "Methodology",
+    "category": "Web Development",
     "description": "Optimizing websites for search engine ranking.",
     "icon": "fa-solid fa-search",
     "visible": true
@@ -1482,7 +1482,7 @@
   {
     "name": "Content Management",
     "level": "BEGINNER",
-    "category": "Methodology",
+    "category": "Web Development",
     "description": "Managing digital content for websites and applications.",
     "icon": "fa-solid fa-file-alt",
     "visible": true
@@ -1508,7 +1508,7 @@
     "level": "BEGINNER",
     "category": "Tool",
     "description": "Content management system for dynamic websites.",
-    "icon": "fa-solid fa-cms",
+    "icon": "fa-brands fa-joomla",
     "visible": true
   },
   {
@@ -2626,7 +2626,7 @@
   {
     "name": "Consul Connect",
     "level": "BEGINNER",
-    "category": "Tool",
+    "category": "DevOps Tool",
     "description": "Service mesh feature for secure service communication.",
     "icon": "fa-solid fa-network-wired",
     "visible": true
@@ -3042,7 +3042,7 @@
   {
     "name": "WCAG Compliance",
     "level": "BEGINNER",
-    "category": "Methodology",
+    "category": "Design",
     "description": "Adhering to web accessibility guidelines.",
     "icon": "fa-solid fa-universal-access",
     "visible": true
@@ -3930,7 +3930,7 @@
   {
     "name": "Home Lab",
     "level": "BEGINNER",
-    "category": "DevOps Tool",
+    "category": "Homelab",
     "description": "Setting up and managing personal server environments for testing.",
     "icon": "fa-solid fa-server",
     "visible": true
@@ -3946,7 +3946,7 @@
   {
     "name": "Selfhosting",
     "level": "BEGINNER",
-    "category": "DevOps Tool",
+    "category": "Self-Hosted",
     "description": "Deploying and managing applications on personal servers.",
     "icon": "fa-solid fa-server",
     "visible": true
@@ -4173,6 +4173,494 @@
     "category": "Framework",
     "description": "Framework for building lightweight, secure desktop apps with web frontends and Rust backends.",
     "icon": "fa-solid fa-desktop",
+    "visible": true
+  },
+  {
+    "name": "Verbal Communication",
+    "level": "BEGINNER",
+    "category": "Soft Skill",
+    "description": "Speaking clearly and confidently in meetings, interviews, and everyday workplace conversations.",
+    "icon": "fa-solid fa-comment-dots",
+    "visible": true
+  },
+  {
+    "name": "Written Communication",
+    "level": "BEGINNER",
+    "category": "Soft Skill",
+    "description": "Writing clear, well-structured emails, reports, and documents for professional audiences.",
+    "icon": "fa-solid fa-file-alt",
+    "visible": true
+  },
+  {
+    "name": "Presentation Skills",
+    "level": "BEGINNER",
+    "category": "Soft Skill",
+    "description": "Delivering engaging presentations and explaining ideas clearly to diverse audiences.",
+    "icon": "fa-solid fa-chalkboard-user",
+    "visible": true
+  },
+  {
+    "name": "Collaboration",
+    "level": "BEGINNER",
+    "category": "Soft Skill",
+    "description": "Working effectively with others across teams to achieve shared goals and outcomes.",
+    "icon": "fa-solid fa-people-arrows",
+    "visible": true
+  },
+  {
+    "name": "Coaching",
+    "level": "BEGINNER",
+    "category": "Soft Skill",
+    "description": "Guiding colleagues through feedback and development to grow their skills and confidence.",
+    "icon": "fa-solid fa-chalkboard-teacher",
+    "visible": true
+  },
+  {
+    "name": "Organizational Skills",
+    "level": "BEGINNER",
+    "category": "Soft Skill",
+    "description": "Structuring tasks, files, and schedules so work stays orderly and nothing slips through.",
+    "icon": "fa-solid fa-sitemap",
+    "visible": true
+  },
+  {
+    "name": "Attention to Detail",
+    "level": "BEGINNER",
+    "category": "Soft Skill",
+    "description": "Producing accurate work by catching errors and inconsistencies before others do.",
+    "icon": "fa-solid fa-eye",
+    "visible": true
+  },
+  {
+    "name": "Work Ethic",
+    "level": "BEGINNER",
+    "category": "Soft Skill",
+    "description": "Dependable, self-motivated approach to work with a strong sense of ownership and responsibility.",
+    "icon": "fa-solid fa-check-circle",
+    "visible": true
+  },
+  {
+    "name": "Interpersonal Skills",
+    "level": "BEGINNER",
+    "category": "Soft Skill",
+    "description": "Building rapport and trust with colleagues, clients, and stakeholders in any setting.",
+    "icon": "fa-solid fa-users",
+    "visible": true
+  },
+  {
+    "name": "Multitasking",
+    "level": "BEGINNER",
+    "category": "Soft Skill",
+    "description": "Handling several responsibilities at once while keeping quality and deadlines on track.",
+    "icon": "fa-solid fa-tasks",
+    "visible": true
+  },
+  {
+    "name": "Customer Service",
+    "level": "BEGINNER",
+    "category": "Business",
+    "description": "Assisting customers promptly and professionally to resolve issues and build lasting loyalty.",
+    "icon": "fa-solid fa-headset",
+    "visible": true
+  },
+  {
+    "name": "Client Relations",
+    "level": "BEGINNER",
+    "category": "Business",
+    "description": "Managing client expectations and nurturing long-term relationships that grow the business.",
+    "icon": "fa-solid fa-handshake",
+    "visible": true
+  },
+  {
+    "name": "Research",
+    "level": "BEGINNER",
+    "category": "Business",
+    "description": "Finding, evaluating, and synthesizing information from reliable sources to support decisions.",
+    "icon": "fa-solid fa-search",
+    "visible": true
+  },
+  {
+    "name": "Analytical Skills",
+    "level": "BEGINNER",
+    "category": "Business",
+    "description": "Breaking down complex data and situations to identify patterns, causes, and opportunities.",
+    "icon": "fa-solid fa-chart-pie",
+    "visible": true
+  },
+  {
+    "name": "Reporting",
+    "level": "BEGINNER",
+    "category": "Business",
+    "description": "Preparing clear, accurate reports that turn raw data into actionable business insight.",
+    "icon": "fa-solid fa-table",
+    "visible": true
+  },
+  {
+    "name": "Budgeting",
+    "level": "BEGINNER",
+    "category": "Business",
+    "description": "Preparing and managing budgets, tracking spend, and keeping costs within approved limits.",
+    "icon": "fa-solid fa-calculator",
+    "visible": true
+  },
+  {
+    "name": "Forecasting",
+    "level": "BEGINNER",
+    "category": "Business",
+    "description": "Projecting future sales, demand, and financial outcomes from historical data and trends.",
+    "icon": "fa-solid fa-chart-bar",
+    "visible": true
+  },
+  {
+    "name": "Change Management",
+    "level": "BEGINNER",
+    "category": "Business",
+    "description": "Guiding organizations through transitions with clear communication, training, and adoption plans.",
+    "icon": "fa-solid fa-arrows-rotate",
+    "visible": true
+  },
+  {
+    "name": "Business Development",
+    "level": "BEGINNER",
+    "category": "Business",
+    "description": "Identifying and pursuing new markets, partnerships, and revenue opportunities for growth.",
+    "icon": "fa-solid fa-seedling",
+    "visible": true
+  },
+  {
+    "name": "Sales",
+    "level": "BEGINNER",
+    "category": "Business",
+    "description": "Closing deals and meeting revenue targets through prospecting, pitching, and negotiation.",
+    "icon": "fa-solid fa-dollar-sign",
+    "visible": true
+  },
+  {
+    "name": "Customer Relationship Management",
+    "level": "BEGINNER",
+    "category": "Business",
+    "description": "Using CRM practices and tools to track customers, pipelines, and lifetime value.",
+    "icon": "fa-solid fa-users",
+    "visible": true
+  },
+  {
+    "name": "Marketing",
+    "level": "BEGINNER",
+    "category": "Business",
+    "description": "Planning and executing marketing activity that raises awareness and drives demand.",
+    "icon": "fa-solid fa-bullhorn",
+    "visible": true
+  },
+  {
+    "name": "Digital Marketing",
+    "level": "BEGINNER",
+    "category": "Business",
+    "description": "Running online campaigns across search, social, email, and display to reach target audiences.",
+    "icon": "fa-solid fa-globe",
+    "visible": true
+  },
+  {
+    "name": "Content Marketing",
+    "level": "BEGINNER",
+    "category": "Business",
+    "description": "Creating and distributing valuable content that attracts and retains a defined audience.",
+    "icon": "fa-solid fa-file-lines",
+    "visible": true
+  },
+  {
+    "name": "Branding",
+    "level": "BEGINNER",
+    "category": "Business",
+    "description": "Shaping brand identity, voice, and positioning to stand out in the market.",
+    "icon": "fa-solid fa-trademark",
+    "visible": true
+  },
+  {
+    "name": "Market Research",
+    "level": "BEGINNER",
+    "category": "Business",
+    "description": "Studying market size, competitors, and customer needs to inform business strategy.",
+    "icon": "fa-solid fa-magnifying-glass-chart",
+    "visible": true
+  },
+  {
+    "name": "Public Relations",
+    "level": "BEGINNER",
+    "category": "Business",
+    "description": "Managing public image and media coverage to build trust and credibility for an organization.",
+    "icon": "fa-solid fa-newspaper",
+    "visible": true
+  },
+  {
+    "name": "Training",
+    "level": "BEGINNER",
+    "category": "Business",
+    "description": "Designing and delivering training that builds practical skills and closes capability gaps.",
+    "icon": "fa-solid fa-graduation-cap",
+    "visible": true
+  },
+  {
+    "name": "Onboarding",
+    "level": "BEGINNER",
+    "category": "Business",
+    "description": "Helping new starters settle in quickly with structured induction and role guidance.",
+    "icon": "fa-solid fa-door-open",
+    "visible": true
+  },
+  {
+    "name": "Knowledge Management",
+    "level": "BEGINNER",
+    "category": "Business",
+    "description": "Capturing, organizing, and sharing organizational knowledge so teams learn faster.",
+    "icon": "fa-solid fa-book-open",
+    "visible": true
+  },
+  {
+    "name": "People Management",
+    "level": "BEGINNER",
+    "category": "Business",
+    "description": "Leading, motivating, and developing a team to deliver consistent performance.",
+    "icon": "fa-solid fa-user-group",
+    "visible": true
+  },
+  {
+    "name": "Staff Recruitment & Selection",
+    "level": "BEGINNER",
+    "category": "Business",
+    "description": "Advertising roles, screening candidates, and hiring the right people through fair selection.",
+    "icon": "fa-solid fa-user-plus",
+    "visible": true
+  },
+  {
+    "name": "Performance Management",
+    "level": "BEGINNER",
+    "category": "Business",
+    "description": "Setting goals, running reviews, and coaching staff to raise performance consistently.",
+    "icon": "fa-solid fa-chart-line",
+    "visible": true
+  },
+  {
+    "name": "Financial & Cash Management",
+    "level": "BEGINNER",
+    "category": "Business",
+    "description": "Managing cash flow, payments, and reserves to keep the business financially healthy.",
+    "icon": "fa-solid fa-coins",
+    "visible": true
+  },
+  {
+    "name": "Sales & Target Management",
+    "level": "BEGINNER",
+    "category": "Business",
+    "description": "Setting sales targets, tracking attainment, and coaching teams to hit their numbers.",
+    "icon": "fa-solid fa-bullseye",
+    "visible": true
+  },
+  {
+    "name": "Marketing Campaign Management",
+    "level": "BEGINNER",
+    "category": "Business",
+    "description": "Planning and running multi-channel campaigns from brief to measurement and ROI review.",
+    "icon": "fa-solid fa-rocket",
+    "visible": true
+  },
+  {
+    "name": "Promotional Strategy",
+    "level": "BEGINNER",
+    "category": "Business",
+    "description": "Designing promotions and offers that lift sales while protecting margin and brand.",
+    "icon": "fa-solid fa-tags",
+    "visible": true
+  },
+  {
+    "name": "Multi-Site Operations Management",
+    "level": "BEGINNER",
+    "category": "Operations",
+    "description": "Running operations across multiple locations with consistent standards and reporting.",
+    "icon": "fa-solid fa-building",
+    "visible": true
+  },
+  {
+    "name": "Inventory & Stock Control",
+    "level": "BEGINNER",
+    "category": "Operations",
+    "description": "Managing stock levels, counts, and replenishment to avoid shortages and overstock.",
+    "icon": "fa-solid fa-boxes-stacked",
+    "visible": true
+  },
+  {
+    "name": "Operational Auditing",
+    "level": "BEGINNER",
+    "category": "Operations",
+    "description": "Reviewing processes and controls against standards to find gaps and drive compliance.",
+    "icon": "fa-solid fa-clipboard-check",
+    "visible": true
+  },
+  {
+    "name": "Workforce Planning & Scheduling",
+    "level": "BEGINNER",
+    "category": "Operations",
+    "description": "Planning shifts and staffing levels to match demand while controlling labor costs.",
+    "icon": "fa-solid fa-calendar-check",
+    "visible": true
+  },
+  {
+    "name": "Business Operations",
+    "level": "BEGINNER",
+    "category": "Operations",
+    "description": "Keeping day-to-day business processes running smoothly, efficiently, and to standard.",
+    "icon": "fa-solid fa-briefcase",
+    "visible": true
+  },
+  {
+    "name": "Quality Assurance",
+    "level": "BEGINNER",
+    "category": "Operations",
+    "description": "Defining and checking quality standards so products and services meet expectations.",
+    "icon": "fa-solid fa-check-double",
+    "visible": true
+  },
+  {
+    "name": "Process Improvement",
+    "level": "BEGINNER",
+    "category": "Operations",
+    "description": "Analyzing and streamlining workflows to remove waste, reduce cost, and raise output.",
+    "icon": "fa-solid fa-cogs",
+    "visible": true
+  },
+  {
+    "name": "Vendor Management",
+    "level": "BEGINNER",
+    "category": "Operations",
+    "description": "Selecting, negotiating with, and managing suppliers to get value and reliable delivery.",
+    "icon": "fa-solid fa-store",
+    "visible": true
+  },
+  {
+    "name": "Contract Negotiation",
+    "level": "BEGINNER",
+    "category": "Operations",
+    "description": "Negotiating favorable contract terms, pricing, and service levels with partners.",
+    "icon": "fa-solid fa-file-signature",
+    "visible": true
+  },
+  {
+    "name": "Procurement",
+    "level": "BEGINNER",
+    "category": "Operations",
+    "description": "Purchasing goods and services at the right price, quality, and lead time.",
+    "icon": "fa-solid fa-shopping-cart",
+    "visible": true
+  },
+  {
+    "name": "Supply Chain Management",
+    "level": "BEGINNER",
+    "category": "Operations",
+    "description": "Coordinating sourcing, production, and distribution to keep goods flowing end to end.",
+    "icon": "fa-solid fa-sitemap",
+    "visible": true
+  },
+  {
+    "name": "Logistics",
+    "level": "BEGINNER",
+    "category": "Operations",
+    "description": "Planning warehousing, transport, and delivery to move goods cost-effectively.",
+    "icon": "fa-solid fa-truck",
+    "visible": true
+  },
+  {
+    "name": "Operations Management",
+    "level": "BEGINNER",
+    "category": "Operations",
+    "description": "Overseeing production and service delivery to hit targets for cost, quality, and speed.",
+    "icon": "fa-solid fa-industry",
+    "visible": true
+  },
+  {
+    "name": "Continuous Improvement",
+    "level": "BEGINNER",
+    "category": "Operations",
+    "description": "Applying lean and continuous-improvement practices to keep refining how work gets done.",
+    "icon": "fa-solid fa-infinity",
+    "visible": true
+  },
+  {
+    "name": "Microsoft Office",
+    "level": "BEGINNER",
+    "category": "Office & Administration",
+    "description": "Working productively with Word, Excel, PowerPoint, and the wider Office suite.",
+    "icon": "fa-brands fa-microsoft",
+    "visible": true
+  },
+  {
+    "name": "Microsoft Excel",
+    "level": "BEGINNER",
+    "category": "Office & Administration",
+    "description": "Building spreadsheets with formulas, pivot tables, and charts to analyze data.",
+    "icon": "fa-solid fa-file-excel",
+    "visible": true
+  },
+  {
+    "name": "Google Workspace",
+    "level": "BEGINNER",
+    "category": "Office & Administration",
+    "description": "Using Gmail, Docs, Sheets, and Drive for cloud-based collaboration and productivity.",
+    "icon": "fa-brands fa-google",
+    "visible": true
+  },
+  {
+    "name": "Data Entry",
+    "level": "BEGINNER",
+    "category": "Office & Administration",
+    "description": "Entering and updating records quickly and accurately in forms and systems.",
+    "icon": "fa-solid fa-keyboard",
+    "visible": true
+  },
+  {
+    "name": "Records Management",
+    "level": "BEGINNER",
+    "category": "Office & Administration",
+    "description": "Filing, retaining, and retrieving records so information is organized and compliant.",
+    "icon": "fa-solid fa-folder",
+    "visible": true
+  },
+  {
+    "name": "Scheduling",
+    "level": "BEGINNER",
+    "category": "Office & Administration",
+    "description": "Coordinating appointments, meetings, and deadlines to keep everyone aligned.",
+    "icon": "fa-solid fa-calendar",
+    "visible": true
+  },
+  {
+    "name": "Administrative Support",
+    "level": "BEGINNER",
+    "category": "Office & Administration",
+    "description": "Providing reliable day-to-day admin support that keeps teams and offices running.",
+    "icon": "fa-solid fa-clipboard-list",
+    "visible": true
+  },
+  {
+    "name": "Documentation",
+    "level": "BEGINNER",
+    "category": "Office & Administration",
+    "description": "Producing clear procedures, guides, and documentation that others can follow.",
+    "icon": "fa-solid fa-book",
+    "visible": true
+  },
+  {
+    "name": "Technical Writing",
+    "level": "BEGINNER",
+    "category": "Office & Administration",
+    "description": "Writing precise technical content such as specs, manuals, and help articles.",
+    "icon": "fa-solid fa-pen",
+    "visible": true
+  },
+  {
+    "name": "Agile Project Management",
+    "level": "BEGINNER",
+    "category": "Methodology",
+    "description": "Delivering projects in iterative increments with close collaboration and frequent feedback.",
+    "icon": "fa-solid fa-tasks",
     "visible": true
   }
 ]
