@@ -2,6 +2,71 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.2.10] - 2026-11-24
+
+### 🐛 Bug Fixes
+
+- **Portfolio visibility is no longer silently changed by profile saves.**
+  Saving the public profile or cover letter used to silently **unpublish** the
+  portfolio: the profile-update payload declared `visible`/`publiclyVisible` as
+  primitive booleans, so any partial save that omitted those keys (which every
+  profile/cover-letter save did) wrote `is_public = 0 AND visible = 0` while
+  still returning HTTP 200. The visibility fields have been **removed from the
+  profile-save endpoint entirely** — a profile save can no longer touch
+  visibility under any circumstances. Visibility now has exactly two writers:
+  `PUT /api/v1/me/profile/visibility` and `PUT /api/v1/me/profile/indexing`.
+  Requests that still send the old keys are safely ignored.
+- **Contact-message updates no longer fail with HTTP 500.** Every
+  `PUT /api/v1/me/contact-messages/{uuid}` (mark-as-read, mark-as-replied,
+  priority, archive) returned 500 with a `LazyInitializationException`: the
+  handler had no `@Transactional`, so with `spring.jpa.open-in-view=false` the
+  session closed before the response DTO was mapped and the lazy-loaded message
+  owner could not be read. The transaction boundary now covers response
+  mapping, matching the read endpoints.
+- **Admin contact-message list no longer fails with HTTP 500.**
+  `GET /api/v1/admin/contact-messages` had the identical lazy-mapping defect
+  and is fixed the same way.
+- **Display Settings no longer shows a false "data mismatch" error.** Saving
+  with no effective change (e.g. toggling a section off then back on) now
+  reports success instead of "Could not save settings due to a data mismatch".
+  Genuine mismatches (a changed setting missing from the server) still error.
+- **Visibility copy clarified** on Display Settings: the master "Portfolio is
+  Public" and search-indexing switches are documented as saving automatically.
+
+### ✅ Testing
+
+- 10 new full-context integration regression tests through real HTTP against
+  real MySQL, deliberately run **without** an ambient test transaction so they
+  reproduce (and therefore pin) the exact production conditions of both bugs:
+  `ProfileVisibilityPartialUpdateIntegrationTest` (4) and
+  `ContactMessageUpdateIntegrationTest` (6).
+- Frontend regression specs for the visibility switch contract and the
+  no-op save path (admin suite now 132 tests; public suite 69).
+- Backend suite: **409/409** green.
+
+## [1.2.9] - 2026-11-23
+
+### ✨ Features
+
+- **Skills catalogue review + business/operations skills**: expanded seeded
+  skills catalogue, owner-focused business/operations skill entries, and the
+  matching loader/test coverage.
+
+### 🐛 Bug Fixes
+
+- **Experience ordering**: manual experience positions now persist reliably
+  (an immutable-set merge failure previously rolled back entire saves of
+  skill-less entries), position `0` gains automatic chronological placement,
+  and ordering is now consistent across admin, public pages, API and all PDF/
+  Markdown exports.
+
+### 📚 Documentation
+
+- Full-system feature list (`docs/FEATURES.md`) and architecture diagrams
+  (`docs/DIAGRAMS.md`).
+
+Earlier releases (v1.0.0 – v1.2.8) are documented by their git tags.
+
 ## [Unreleased] - 2026-01-14
 
 ### 🎨 UI & UX Improvements
