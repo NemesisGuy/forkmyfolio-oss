@@ -28,6 +28,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -221,6 +222,11 @@ public class AdminController {
      */
     @GetMapping("/contact-messages")
     @Operation(summary = "Get all contact messages from all users")
+    // Phase 0.31 (TASKS §H2): same LazyInitializationException class as the
+    // user-side PUT — findAll()'s readOnly transaction ends before the DTO is
+    // mapped, and toDtoList touches each message's LAZY user proxy with
+    // open-in-view=false. The transaction must cover the mapping.
+    @Transactional
     public ResponseEntity<ApiResponseWrapper<List<ContactMessageDto>>> getAllContactMessages() {
         List<ContactMessageDto> messages = contactMessageMapper.toDtoList(contactMessageService.findAll());
         return ResponseEntity.ok(new ApiResponseWrapper<>(messages));

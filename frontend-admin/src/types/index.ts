@@ -27,7 +27,13 @@ export interface Profile {
   websiteUrl?: string;
   publicEmail?: string;
   coverLetterTemplate?: string;
-  publiclyVisible: boolean;
+  /**
+   * Phase 0.31 (H1): the backend serialises master visibility as `isPublic`
+   * (PortfolioProfileDto @JsonProperty). The old `publiclyVisible` key was
+   * never present in GET payloads and is no longer accepted by the profile-save
+   * DTO — visibility is written only via PUT /me/profile/visibility.
+   */
+  isPublic?: boolean;
   location?: string;
 }
 

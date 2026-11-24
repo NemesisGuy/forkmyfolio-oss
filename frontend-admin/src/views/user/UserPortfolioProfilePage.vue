@@ -47,7 +47,7 @@
                           When enabled, anyone with your link can view your portfolio. When disabled, the page will be locked.
                         </p>
                       </div>
-                      <input id="publiclyVisible" v-model="formState.publiclyVisible" class="form-check-input ms-3"
+                      <input id="publiclyVisible" v-model="isPublic" class="form-check-input ms-3"
                              role="switch" type="checkbox">
                     </div>
                   </div>
@@ -157,8 +157,10 @@ import {
   getMyAccount,
   getMyPublicProfile,
   updateMyPublicProfile,
+  updateMyProfileVisibility,
   ApiError
 } from '@/services/api/index.js';
+import { usePublicPortfolioStore } from '@/stores/publicPortfolioStore.js';
 import LoadingModal from '@/components/common/modals/LoadingModal.vue';
 import ErrorModal from '@/components/common/modals/ErrorModal.vue';
 import SuccessModal from '@/components/common/modals/SuccessModal.vue';
@@ -190,9 +192,18 @@ const formState = reactive({
   githubUrl: '',
   resumeUrl: '',
   resumeImageUrl: '',
-  coverLetterTemplate: '',
-  publiclyVisible: false
+  coverLetterTemplate: ''
 });
+
+// Phase 0.31 (TASKS §H1 / KNOWN_ISSUES §14): the visibility switch used to
+// bind formState.publiclyVisible — a key the GET payload never contains (the
+// backend serialises it as isPublic) and one the profile-save DTO ignores.
+// It therefore rendered unchecked even while the portfolio was published and
+// saving it did nothing (a no-op switch). Bind the AUTHORITATIVE isPublic
+// flag instead and persist it through PUT /me/profile/visibility — the only
+// endpoint allowed to change visibility after the H1 fix.
+const isPublic = ref(false);
+let originallyPublic = false;
 
 const closeErrorModal = () => {
   showErrorModal.value = false;
@@ -219,6 +230,10 @@ onMounted(async () => {
       const profileData = await getMyPublicProfile() as Profile;
       // If this succeeds, a profile exists. Populate the form.
       Object.assign(formState, profileData);
+      // H1: seed the switch from the authoritative flag (isPublic), not from
+      // the never-present publiclyVisible key.
+      isPublic.value = profileData.isPublic === true;
+      originallyPublic = isPublic.value;
       profileExists.value = true;
     } catch (profileError) {
       if (profileError instanceof ApiError && profileError.httpStatus === 404) {
@@ -250,7 +265,32 @@ const handleSave = async () => {
   try {
     // Both CREATE and UPDATE now use the same PUT /me/profile endpoint in the backend
     // which handles "upsert" logic.
-    await updateMyPublicProfile(formState);
+    // Phase 0.31 (H1): send TEXT FIELDS ONLY. The profile-save DTO no longer
+    // carries visibility (a partial save used to silently unpublish —
+    // KNOWN_ISSUES §14), so any visibility change is persisted separately
+    // through the dedicated endpoint.
+    const d = formState;
+    await updateMyPublicProfile({
+      headline: d.headline,
+      summary: d.summary,
+      publicEmail: d.publicEmail,
+      location: d.location,
+      websiteUrl: d.websiteUrl,
+      linkedinUrl: d.linkedinUrl,
+      githubUrl: d.githubUrl,
+      resumeUrl: d.resumeUrl,
+      resumeImageUrl: d.resumeImageUrl,
+      coverLetterTemplate: d.coverLetterTemplate,
+    });
+
+    if (profileExists.value && isPublic.value !== originallyPublic) {
+      await updateMyProfileVisibility({ isPublic: isPublic.value });
+      // The cached public payload is now stale — same treatment as the
+      // Display Settings master toggle (Phase 7.4 §5).
+      usePublicPortfolioStore().clearPortfolio();
+      originallyPublic = isPublic.value;
+    }
+
     profileExists.value = true;
     successMessage.value = 'Your portfolio profile has been saved successfully.';
     showSuccessModal.value = true;

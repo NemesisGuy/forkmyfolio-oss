@@ -101,8 +101,8 @@ public class PublicPortfolioCacheIntegrationTest extends AbstractMySqlIntegratio
         PortfolioProfile updates = new PortfolioProfile();
         updates.setHeadline(freshHeadline);
         updates.setSummary("Fresh summary (Phase 0.20 eviction proof).");
-        updates.setVisible(true);
-        updates.setPubliclyVisible(true);
+        // Phase 0.31 (H1): visibility is no longer part of the editor path —
+        // createOrUpdateProfile never copies it, so no setters here.
         portfolioProfileService.createOrUpdateProfile(updates, owner);
 
         assertThat(redisTemplate.hasKey(CACHE_KEY_PREFIX + slug)).isFalse();

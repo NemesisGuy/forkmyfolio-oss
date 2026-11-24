@@ -32,7 +32,8 @@
                     Portfolio is {{ isPortfolioPublic ? 'Public' : 'Private' }}
                   </h6>
                   <small class="text-muted">This is the main on/off switch for your entire public
-                    portfolio.</small>
+                    portfolio. It saves automatically as soon as you flip it — no Save button
+                    needed.</small>
                 </div>
                 <div class="form-check form-switch form-switch-lg">
                   <input
@@ -68,7 +69,7 @@
                     Allow search engines to index my portfolio. This affects <strong>search-engine
                     discoverability only</strong> — your portfolio remains publicly accessible through its
                     direct link either way. Your portfolio must also be public, and the platform must permit
-                    indexing, for this to take effect.
+                    indexing, for this to take effect. This switch also saves automatically.
                   </small>
                 </div>
                 <div class="form-check form-switch form-switch-lg">
@@ -338,10 +339,21 @@ const handleSaveSettings = async () => {
       value: String(setting.value),
     }));
 
-  if (payload.length === 0 || payload.some(p => !p.uuid)) {
+  if (payload.some(p => !p.uuid)) {
     errorMessage.value = 'Could not save settings due to a data mismatch. Please refresh and try again.';
     showErrorModal.value = true;
     isSaving.value = false;
+    return;
+  }
+
+  if (payload.length === 0) {
+    // Phase 0.31 (TASKS §H1): the form can be "dirty" with no real delta —
+    // e.g. toggling a section OFF then back ON (exactly what the owner did to
+    // light up the Save button). Pre-fix this hit the branch above and showed
+    // the scary "data mismatch" error although every value on screen already
+    // matches the server. A no-op save is a SUCCESS, not a data mismatch.
+    isDirty.value = false;
+    showSuccessModal.value = true;
     return;
   }
 

@@ -57,8 +57,10 @@ public class PortfolioProfileMapper {
         profile.setResumeImageUrl(request.getResumeImageUrl());
         profile.setLocation(request.getLocation());
         profile.setCoverLetterTemplate(request.getCoverLetterTemplate());
-        profile.setVisible(request.isVisible());
-        profile.setPubliclyVisible(request.isPubliclyVisible());
+        // Phase 0.31 (H1): visibility is deliberately NOT mapped here — see
+        // UpdatePortfolioProfileRequest. A profile save must never be able to
+        // touch is_public/visible; only /me/profile/visibility and
+        // /me/profile/indexing do.
         return profile;
     }
 

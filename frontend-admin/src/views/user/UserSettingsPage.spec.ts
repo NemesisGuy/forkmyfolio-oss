@@ -237,4 +237,48 @@ describe('UserSettingsPage.vue (Phase 7.4 §5 regression)', () => {
       expect.objectContaining({ type: 'error' })
     );
   });
+
+  // --- Phase 0.31 (TASKS §H1): the owner's Save-button dead-end ---
+
+  it('treats a net-zero section toggle (off then on) as a successful no-op save, not a data mismatch', async () => {
+    const wrapper = await mountPage();
+
+    // Owner's exact flow: flipping a section OFF then back ON is what lit up
+    // the disabled Save button; nothing actually changed by the time they
+    // pressed it.
+    const projects = wrapper.find('input[id="switch-portfolio.projects.show"]');
+    await projects.setValue(false);
+    await projects.setValue(true);
+
+    await wrapper.find('form button[type="submit"]').trigger('submit');
+    await flushPromises();
+
+    // No request is sent for an empty delta...
+    expect(settingsApi.update).not.toHaveBeenCalled();
+    // ...and the misleading "Could not save settings due to a data mismatch"
+    // error modal (the owner's dead-end) must NOT appear — a no-op save is a
+    // success.
+    expect(wrapper.findComponent({ name: 'ErrorModal' }).props('visible')).toBe(false);
+    expect(wrapper.findComponent({ name: 'SuccessModal' }).props('visible')).toBe(true);
+    // Dirty flag cleared: Save/Reset return to disabled.
+    expect(wrapper.find('form button[type="submit"]').attributes('disabled')).toBeDefined();
+    expect(wrapper.find('form button[type="button"]').attributes('disabled')).toBeDefined();
+  });
+
+  it('still reports a genuine data mismatch when a changed setting has no uuid', async () => {
+    // A setting the GET list never returned (uuid undefined) is the REAL
+    // mismatch case — that error must survive the H1 no-op change.
+    vi.mocked(settingsApi.getAll).mockResolvedValue([
+      { name: 'portfolio.contact.show', description: 'Contact', value: 'true', uuid: 'uuid-contact' },
+    ] as never);
+    const wrapper = await mountPage();
+
+    // Projects row has no uuid from the server; toggling it is a real delta.
+    await wrapper.find('input[id="switch-portfolio.projects.show"]').setValue(false);
+    await wrapper.find('form button[type="submit"]').trigger('submit');
+    await flushPromises();
+
+    expect(settingsApi.update).not.toHaveBeenCalled();
+    expect(wrapper.findComponent({ name: 'ErrorModal' }).props('visible')).toBe(true);
+  });
 });

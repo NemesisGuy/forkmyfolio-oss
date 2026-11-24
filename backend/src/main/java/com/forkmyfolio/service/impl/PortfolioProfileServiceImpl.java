@@ -51,8 +51,12 @@ public class PortfolioProfileServiceImpl implements PortfolioProfileService {
         existingProfile.setResumeImageUrl(profileUpdates.getResumeImageUrl());
         existingProfile.setLocation(profileUpdates.getLocation());
         existingProfile.setCoverLetterTemplate(profileUpdates.getCoverLetterTemplate());
-        existingProfile.setVisible(profileUpdates.isVisible());
-        existingProfile.setPubliclyVisible(profileUpdates.isPubliclyVisible());
+        // Phase 0.31 (TASKS §H1 / KNOWN_ISSUES §14): visibility fields are no
+        // longer copied here. They used to be primitive booleans on the
+        // request DTO, so every partial save (cover-letter editor) wrote
+        // false/false — a silent unpublish. Profile saves now leave
+        // is_public/visible untouched; visibility changes go through
+        // updateProfileVisibility / updateProfileIndexing only.
 
         return portfolioProfileRepository.save(existingProfile);
     }

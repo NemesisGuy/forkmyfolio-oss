@@ -55,6 +55,14 @@ public class ContactMessageManagementController {
 
     @PutMapping("/{uuid}")
     @Operation(summary = "Update a contact message", description = "Partially updates a message's attributes like priority, read status, etc. Only include the fields you want to change.")
+    // Phase 0.31 (TASKS §H2): the response is mapped AFTER the service call, and
+    // spring.jpa.open-in-view=false means no session survives the service's own
+    // transaction — ContactMessageMapper.toDto dereferences message.getUser(),
+    // a LAZY proxy, which threw LazyInitializationException (HTTP 500 on EVERY
+    // read/replied/priority/archive update). Holding the transaction across the
+    // mapping mirrors the GET handlers above. Regression pin:
+    // ContactMessageUpdateIntegrationTest (real HTTP, no ambient test tx).
+    @Transactional
     public ResponseEntity<ApiResponseWrapper<ContactMessageDto>> updateMyMessage(
             @PathVariable UUID uuid,
             @Valid @RequestBody UpdateContactMessageRequest request) {
