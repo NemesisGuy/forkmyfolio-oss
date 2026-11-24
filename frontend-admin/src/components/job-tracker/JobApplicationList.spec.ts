@@ -24,7 +24,13 @@ vi.mock('@/services/jobApplicationService', () => ({
   },
 }));
 
+vi.mock('@/utils/jobApplicationsCsv', () => ({
+  buildJobApplicationsCsv: vi.fn(() => ''),
+  downloadJobApplicationsCsv: vi.fn(),
+}));
+
 import { jobApplicationService } from '@/services/jobApplicationService';
+import { downloadJobApplicationsCsv } from '@/utils/jobApplicationsCsv';
 
 const app = (overrides: Partial<JobApplication> & { uuid: string }): JobApplication => ({
   jobTitle: 'Developer',
@@ -163,5 +169,85 @@ describe('JobApplicationList.vue (Phase 8.4)', () => {
     const chip = summary.findAll('button').find(b => b.text().includes('Interested'))!;
     await chip.trigger('click');
     expect(wrapper.findAll('.card-title').map(c => c.text())).toEqual(['Backend Engineer']);
+  });
+
+  // --- Phase 0.32 (TASKS §I2): view toggle, board DnD, CSV export ---
+
+  it('view toggle switches between grid and board', async () => {
+    const wrapper = await mountPage();
+
+    expect(wrapper.find('[data-testid="job-board"]').exists()).toBe(false);
+    expect(wrapper.findAll('[data-testid="card-status"]')).toHaveLength(4); // archived hidden
+
+    await wrapper.find('[data-testid="view-board"]').trigger('click');
+    expect(wrapper.find('[data-testid="job-board"]').exists()).toBe(true);
+    expect(wrapper.findAll('[data-testid="board-card"]')).toHaveLength(4);
+    expect(wrapper.findAll('[data-testid="card-status"]')).toHaveLength(0); // grid gone
+
+    await wrapper.find('[data-testid="view-grid"]').trigger('click');
+    expect(wrapper.find('[data-testid="job-board"]').exists()).toBe(false);
+    expect(wrapper.findAll('[data-testid="card-status"]')).toHaveLength(4);
+  });
+
+  it('board drag-and-drop updates status optimistically and calls the API', async () => {
+    vi.mocked(jobApplicationService.update).mockResolvedValue({} as never);
+    const wrapper = await mountPage();
+    await wrapper.find('[data-testid="view-board"]').trigger('click');
+
+    // a1 (INTERESTED) is the only Wishlist card in richList
+    const card = wrapper.find('[data-testid="column-body-wishlist"]')
+      .findAll('[data-testid="board-card"]')[0];
+    await card.trigger('dragstart', { dataTransfer: { setData: vi.fn(), effectAllowed: 'move' } });
+    await wrapper.find('[data-testid="board-column-offer"]').trigger('drop');
+    await flushPromises();
+
+    expect(jobApplicationService.update).toHaveBeenCalledWith('a1', { status: 'OFFER' });
+    // Optimistic move: a1 now sits beside a5 in the Offer column
+    const offerCards = wrapper.find('[data-testid="column-body-offer"]')
+      .findAll('[data-testid="board-card"]');
+    expect(offerCards).toHaveLength(2);
+    expect(wrapper.find('[data-testid="board-error"]').exists()).toBe(false);
+  });
+
+  it('board drop failure reverts the card and shows a non-destructive banner', async () => {
+    vi.mocked(jobApplicationService.update).mockRejectedValueOnce(new Error('offline') as never);
+    const wrapper = await mountPage();
+    await wrapper.find('[data-testid="view-board"]').trigger('click');
+
+    const card = wrapper.find('[data-testid="column-body-wishlist"]')
+      .findAll('[data-testid="board-card"]')[0];
+    await card.trigger('dragstart', { dataTransfer: { setData: vi.fn(), effectAllowed: 'move' } });
+    await wrapper.find('[data-testid="board-column-offer"]').trigger('drop');
+    await flushPromises();
+
+    expect(wrapper.find('[data-testid="board-error"]').exists()).toBe(true);
+    // Reverted: back in Wishlist, Offer column untouched
+    expect(wrapper.find('[data-testid="column-body-wishlist"]')
+      .findAll('[data-testid="board-card"]')).toHaveLength(1);
+    expect(wrapper.find('[data-testid="column-body-offer"]')
+      .findAll('[data-testid="board-card"]')).toHaveLength(1);
+    // The page itself never blanks out
+    expect(wrapper.find('.alert-danger').exists()).toBe(false);
+  });
+
+  it('Export CSV hands the CURRENT filtered selection to the CSV builder', async () => {
+    const wrapper = await mountPage();
+    await wrapper.find('#tracker-search').setValue('alpha');
+
+    await wrapper.find('[data-testid="export-csv"]').trigger('click');
+
+    expect(downloadJobApplicationsCsv).toHaveBeenCalledTimes(1);
+    const passed = vi.mocked(downloadJobApplicationsCsv).mock.calls[0][0];
+    expect(passed.map(a => a.uuid)).toEqual(['a1', 'a5']);
+  });
+
+  it('Export CSV is disabled when the selection is empty', async () => {
+    const wrapper = await mountPage();
+    await wrapper.find('#tracker-search').setValue('zzz-no-match');
+
+    const btn = wrapper.find('[data-testid="export-csv"]');
+    expect(btn.attributes('disabled')).toBeDefined();
+    await btn.trigger('click');
+    expect(downloadJobApplicationsCsv).not.toHaveBeenCalled();
   });
 });

@@ -10,6 +10,9 @@
           </p>
         </div>
 
+        <!-- Phase 0.32: due-today / overdue job-application alerts (self-hiding) -->
+        <JobTrackerDueWidget class="mb-4" />
+
         <div class="row g-4 justify-content-center">
           <!-- Profile & Account -->
           <div class="col-md-6 col-lg-4 animate-fade-in-up" style="animation-delay: 0.2s;">
@@ -233,6 +236,7 @@
 import {computed} from 'vue';
 import {authService} from '@/services/authService';
 import type { User } from '@/types';
+import JobTrackerDueWidget from '@/components/job-tracker/JobTrackerDueWidget.vue';
 import { IdCard, KanbanSquare, Briefcase, Tags, BadgeCheck, MessageSquareQuote, Mail, CloudDownload, Database, SlidersHorizontal, FileText, Ticket } from 'lucide-vue-next';
 
 const user = computed(() => authService.user.value as User | null);

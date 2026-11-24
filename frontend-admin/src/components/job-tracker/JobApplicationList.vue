@@ -4,9 +4,11 @@ import { jobApplicationService } from '@/services/jobApplicationService';
 import type { JobApplication, CreateJobApplicationRequest, UpdateJobApplicationRequest, ApplicationStatus } from '@/types';
 import { APPLICATION_STATUS_ORDER, STATUS_META } from '@/types';
 import JobApplicationCard from './JobApplicationCard.vue';
+import JobApplicationBoard from './JobApplicationBoard.vue';
 import JobApplicationModal from './JobApplicationModal.vue';
 import JobApplicationDetailsModal from './JobApplicationDetailsModal.vue';
-import { Briefcase, Plus, FileX, Search, Archive } from 'lucide-vue-next';
+import { downloadJobApplicationsCsv } from '@/utils/jobApplicationsCsv';
+import { Briefcase, Plus, FileX, Search, Archive, LayoutGrid, KanbanSquare, FileDown } from 'lucide-vue-next';
 
 /**
  * Phase 8.4: dedicated Job Application management page.
@@ -33,6 +35,10 @@ const typeFilter = ref('ALL');
 const arrangementFilter = ref('ALL');
 const sortBy = ref<'statusUpdatedAt' | 'createdAt' | 'appliedAt' | 'followUpAt' | 'deadlineAt'>('statusUpdatedAt');
 const showArchived = ref(false);
+
+// --- Phase 0.32: grid/board view toggle + CSV export + board actions ---
+const viewMode = ref<'grid' | 'board'>('grid');
+const boardError = ref<string | null>(null);
 
 /** Employment-type options offered by the create/edit form (free-text field). */
 const EMPLOYMENT_TYPES = ['Full-Time', 'Part-Time', 'Contract', 'Temporary', 'Internship', 'Freelance'];
@@ -150,6 +156,34 @@ const resetFilters = () => {
   sortBy.value = 'statusUpdatedAt';
 };
 
+/** Export the CURRENT selection (search + filters + sort) as CSV. */
+const exportCsv = () => {
+  downloadJobApplicationsCsv(filteredApplications.value);
+};
+
+/**
+ * Board drag-and-drop status change: optimistic local move, then the API.
+ * On failure the previous status is restored and a non-destructive banner
+ * is shown (unlike alert(), it never blanks the view).
+ */
+const handleBoardStatusChange = async (uuid: string, status: ApplicationStatus) => {
+  const app = applications.value.find(a => a.uuid === uuid);
+  if (!app || app.status === status) return;
+
+  const previous = app.status;
+  app.status = status;
+  app.statusUpdatedAt = new Date().toISOString();
+  boardError.value = null;
+
+  try {
+    await jobApplicationService.update(uuid, { status });
+  } catch (error) {
+    console.error('Failed to update application status', error);
+    app.status = previous;
+    boardError.value = 'Could not move the application. Please try again.';
+  }
+};
+
 onMounted(() => {
   fetchApplications();
 });
@@ -157,11 +191,33 @@ onMounted(() => {
 
 <template>
   <div class="container-fluid py-4">
-    <div class="d-flex justify-content-between align-items-center mb-4">
+    <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
       <h2 class="mb-0 text-white"><Briefcase class="me-2" />Job Applications</h2>
-      <button class="btn btn-primary" @click="openCreateModal">
-        <Plus class="me-1" /> Track New
-      </button>
+      <div class="d-flex align-items-center gap-2">
+        <div class="btn-group" role="group" aria-label="View mode" data-testid="view-toggle">
+          <button
+            type="button"
+            class="btn btn-sm"
+            :class="viewMode === 'grid' ? 'btn-light' : 'btn-outline-light'"
+            data-testid="view-grid"
+            @click="viewMode = 'grid'"
+          >
+            <LayoutGrid class="me-1" :size="14" />Grid
+          </button>
+          <button
+            type="button"
+            class="btn btn-sm"
+            :class="viewMode === 'board' ? 'btn-light' : 'btn-outline-light'"
+            data-testid="view-board"
+            @click="viewMode = 'board'"
+          >
+            <KanbanSquare class="me-1" :size="14" />Board
+          </button>
+        </div>
+        <button class="btn btn-primary" @click="openCreateModal">
+          <Plus class="me-1" /> Track New
+        </button>
+      </div>
     </div>
 
     <!-- Loading state -->
@@ -242,14 +298,26 @@ onMounted(() => {
               </select>
             </div>
           </div>
-          <div class="d-flex justify-content-between align-items-center mt-2">
+          <div class="d-flex justify-content-between align-items-center mt-2 flex-wrap gap-2">
             <div class="form-check form-switch">
               <input id="show-archived" v-model="showArchived" class="form-check-input" type="checkbox" role="switch">
               <label class="form-check-label small" for="show-archived">
                 <Archive class="me-1" style="width: 14px; height: 14px;" />Show archived
               </label>
             </div>
-            <button class="btn btn-sm btn-outline-light" type="button" @click="resetFilters">Reset filters</button>
+            <div class="d-flex gap-2">
+              <button
+                class="btn btn-sm btn-outline-success"
+                type="button"
+                data-testid="export-csv"
+                :disabled="filteredApplications.length === 0"
+                title="Export the current selection as CSV"
+                @click="exportCsv"
+              >
+                <FileDown class="me-1" :size="14" />Export CSV ({{ filteredApplications.length }})
+              </button>
+              <button class="btn btn-sm btn-outline-light" type="button" @click="resetFilters">Reset filters</button>
+            </div>
           </div>
         </div>
       </div>
@@ -266,16 +334,34 @@ onMounted(() => {
         <button class="btn btn-outline-light mt-2" @click="resetFilters">Clear filters</button>
       </div>
 
-      <!-- Card grid -->
-      <div v-else class="row row-cols-1 row-cols-md-2 row-cols-lg-3 row-cols-xl-4 g-4">
-        <div class="col" v-for="app in filteredApplications" :key="app.uuid">
-          <JobApplicationCard
-            :application="app"
-            @view="openView"
-            @edit="openEditModal"
-            @delete="handleDelete"
-          />
+      <!-- Views (grid / board) — shares the empty-state v-else chain above -->
+      <div v-else>
+        <!-- Board drag-and-drop failure banner (non-destructive) -->
+        <div v-if="boardError" class="alert alert-warning py-2" data-testid="board-error">
+          <p class="mb-0">{{ boardError }}</p>
         </div>
+
+        <!-- Card grid -->
+        <div v-if="viewMode === 'grid'" class="row row-cols-1 row-cols-md-2 row-cols-lg-3 row-cols-xl-4 g-4">
+          <div class="col" v-for="app in filteredApplications" :key="app.uuid">
+            <JobApplicationCard
+              :application="app"
+              @view="openView"
+              @edit="openEditModal"
+              @delete="handleDelete"
+            />
+          </div>
+        </div>
+
+        <!-- Kanban board (Phase 0.32) -->
+        <JobApplicationBoard
+          v-else
+          :applications="filteredApplications"
+          :show-archived="showArchived"
+          @status-change="handleBoardStatusChange"
+          @view="openView"
+          @edit="openEditModal"
+        />
       </div>
     </template>
 
