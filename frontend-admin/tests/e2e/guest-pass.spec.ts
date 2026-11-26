@@ -226,8 +226,12 @@ test.describe('GuestPass System E2E', () => {
     await recruiterPage.click('.navbar-brand');
     await recruiterPage.waitForURL(url => url.pathname === '/', { timeout: 10000 });
     await recruiterPage.goBack();
-    // Wait for redirect
-    await recruiterPage.waitForURL(url => url.pathname.includes('/guest-access'), { timeout: 20000 });
+    // Load-sensitive (TESTING_POLICY §4.1): the guard redirects only after the
+    // revoked guest's portfolio/settings request returns 401. Under full-suite
+    // load that response queued past the old 20s window (run N landed on the
+    // SPA's /not-found first); raise the budget, never weaken the assertion —
+    // the guest MUST end up on /guest-access with Invalid Token.
+    await recruiterPage.waitForURL(url => url.pathname.includes('/guest-access'), { timeout: 60000 });
     await expect(recruiterPage.getByTestId('error-title')).toHaveText('Invalid Token', { timeout: 15000 });
     console.log('E2E: Recruiter successfully kicked');
 

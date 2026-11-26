@@ -2,6 +2,34 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.3.0] - 2026-11-26
+
+### ✨ Features
+
+- **Keycloak / OIDC social login (opt-in).** The stack now ships provisions for
+  OIDC login end-to-end: backend OIDC registration + user provisioning, Vue
+  "Sign in with Keycloak" button and `/oauth2/redirect` callback, optional Nuxt
+  entry link, and `/oauth2/` routes in both nginx templates. Enabled entirely
+  via environment variables (`KEYCLOAK_CLIENT_ID`, `KEYCLOAK_CLIENT_SECRET`,
+  `KEYCLOAK_ISSUER_URI`, `VITE_SOCIAL_LOGIN_ENABLED`, `VITE_SOCIAL_PROVIDERS`,
+  `NUXT_PUBLIC_SOCIAL_LOGIN_ENABLED`) — **no IdP URL or secret in the repo**.
+  New Flyway migration `V14` adds `KEYCLOAK` to the provider enum; accounts are
+  linked by `(provider, provider_id)` then email, never merged silently with a
+  LOCAL account, and always receive `ROLE_USER`.
+
+### 🔒 Security / hardening
+
+- OAuth2 success and failure handlers share one redirect allowlist and one
+  refresh-cookie factory with password login. Backend starts with no Keycloak
+  configured (harmless local placeholder issuer; no eager HTTP discovery).
+
+### ✅ Testing
+
+- Backend battery **465/465**, admin vitest **198/198**, public **74/74**,
+  Playwright **107/107** (4 new e2e pins across both projects for the
+  `/oauth2/` proxy route and the SPA callback error surface), ESLint clean,
+  secret scan CLEAN.
+
 ## [1.2.11] - 2026-11-26
 
 ### 🐛 Bug Fixes

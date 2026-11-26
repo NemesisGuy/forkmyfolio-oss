@@ -131,10 +131,42 @@ is missing.
 | `APP_COOKIE_SAMESITE`, `APP_SECURITY_COOKIE_DOMAIN` | Cookie hardening for detached/cross-site deployments |
 | `ANALYTICS_ENCRYPTION_KEY` | AES-256-GCM key, Base64, exactly 32 bytes (`openssl rand -base64 32`). Encrypts stored analytics provider credentials. **Rotating it invalidates stored analytics credentials.** |
 | `NUXT_PUBLIC_INDEXABLE` | `true` allows search-engine crawling of public sites; `false` for private deployments |
-| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`, `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` | **Backend-only OAuth2 client** (Google/GitHub). No button or token handling ships in either frontend and the bundled proxy does not route `/oauth2/**`, so social login is **not usable through this example stack**. The backend handlers exist for a provider wired by a custom deployment; a Keycloak/OIDC integration is planned. When enabling a provider, override `app.oauth2.authorized-redirect-uris` (env: `APP_OAUTH2_AUTHORIZEDREDIRECTURIS`, comma-separated) and register the callback URL with the provider — the built-in defaults point at localhost. |
+| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`, `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` | Backend OAuth2 registrations. Their API handlers exist, but the SPA does **not** render buttons for these ids — they remain backend-only UI-wise unless a frontend provider descriptor is added. Register the callback URL with the provider out-of-band; the built-in defaults point at localhost. |
+| `KEYCLOAK_CLIENT_ID`, `KEYCLOAK_CLIENT_SECRET`, `KEYCLOAK_ISSUER_URI` | Backend-only OIDC registration values for a Keycloak realm/client. Set these only when enabling the Keycloak provider; never in a frontend build or a repository file. |
+| `APP_OAUTH2_AUTHORIZEDREDIRECTURIS` | Comma-separated allowlist of callback redirect URIs used by the backend OAuth2/OIDC flow. Must include the deployed SPA origin's `/oauth2/redirect` when social login is enabled. |
+| `VITE_SOCIAL_LOGIN_ENABLED`, `VITE_SOCIAL_PROVIDERS` | Non-secret SPA runtime flags (`config.js`, injected at container start). `true` plus a comma-separated provider id (currently `keycloak`) renders "Sign in with Keycloak" on `/login`. Disabled by default; no issuer URL or secret is exposed in built assets. |
+| `NUXT_PUBLIC_SOCIAL_LOGIN_ENABLED` | Non-secret public-site flag; `true` shows an optional sign-in link in the Nuxt navbar that navigates to the SPA's `/login`. Disabled by default. |
 
 The application database user is deliberately separate from the MySQL root
 account: the application never needs root privileges.
+
+### Social / OIDC login (opt-in)
+
+The stack now ships the full Keycloak/OIDC path, but it is **disabled by
+default**. To enable it:
+
+1. Configure the provider only in your git-ignored `.env`:
+   `KEYCLOAK_CLIENT_ID`, `KEYCLOAK_CLIENT_SECRET`, `KEYCLOAK_ISSUER_URI`
+   (and `APP_OAUTH2_AUTHORIZEDREDIRECTURIS` for the callback allowlist).
+   Deploying Keycloak itself is out of scope — it is an external IdP.
+2. Set `VITE_SOCIAL_LOGIN_ENABLED=true` and `VITE_SOCIAL_PROVIDERS=keycloak`
+   to show the "Sign in with Keycloak" button on the SPA login page. Optionally
+   set `NUXT_PUBLIC_SOCIAL_LOGIN_ENABLED=true` for a sign-in link on the public
+   site.
+3. Register the provider callback URL (`/oauth2/callback/keycloak` on the
+   deployed host, plus the SPA's `/oauth2/redirect` as an authorized redirect
+   URI) with your IdP. Real issuer URLs and credentials never belong in any
+   repository file, Docker image or built asset.
+
+Flow: the button opens the backend's `/oauth2/authorize/keycloak` with a
+`redirect_uri` derived from the browser's own origin (so no hostname is baked
+into the build) → the IdP posts back to `/oauth2/callback/keycloak` → the
+backend issues the app JWT and an HttpOnly refresh cookie → it redirects to the
+SPA at `/oauth2/redirect?token=...`, which consumes the token like a password
+login, fetches the account and navigates to the dashboard. The proxy routes
+`/oauth2/**` to the backend and serves the SPA's `/oauth2/redirect` view from
+the frontend (same-host mode); no `/oauth2/**` request reaches Nuxt. Google and
+GitHub registrations remain backend-only in the UI.
 
 ## Initial admin setup
 
@@ -162,9 +194,10 @@ those credentials.
   asked to log in again when its access token expires). Deactivating an account
   revokes its refresh tokens and rejects already-issued JWTs immediately.
 - The OAuth2 authorization-request cookie is **HMAC-signed JSON** keyed with the
-  JWT signing secret (no Java native deserialization). The bundled proxy does
-  not route `/oauth2/**`, so keep the backend port private unless you wire that
-  path deliberately.
+  JWT signing secret (no Java native deserialization). The bundled proxy routes
+  `/oauth2/**` to the backend, so keep the backend port private: only the proxy
+  should be publicly reachable. Frontend runtime config carries boolean flags
+  and provider ids only — never issuer URLs or credentials.
 - Login, registration and guest-login are rate-limited per client IP (default
   120 requests / 5 minutes, env-tunable). `/auth/refresh-token` is deliberately
   exempt: every SPA page load probes it, it only consumes a server-issued

@@ -1,4 +1,7 @@
 import {ApiError} from './ApiError';
+// The Window.runtimeConfig type (including the social-login flags) is declared
+// centrally in src/services/runtimeConfig.ts.
+import '@/services/runtimeConfig';
 
 /**
  * @file src/services/api/apiClient.ts
@@ -15,14 +18,6 @@ interface FetchOptions extends Omit<RequestInit, 'body'> {
   responseType?: 'json' | 'raw' | 'blob';
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   body?: any; // Allow anything for the options; we handle serialization internally.
-}
-
-declare global {
-  interface Window {
-    runtimeConfig?: {
-      API_BASE_URL?: string;
-    };
-  }
 }
 
 // This will be injected by initAuth.js to break the circular dependency.

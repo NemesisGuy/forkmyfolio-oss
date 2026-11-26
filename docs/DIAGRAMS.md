@@ -40,7 +40,8 @@ flowchart TB
     end
 
     subgraph External["External services"]
-        P1["OAuth2 providers<br/>Google, GitHub"]
+        P1["OAuth2 providers<br/>Google, GitHub<br/>(backend-only in UI)"]
+        P3["Keycloak / OIDC<br/>(optional, env-enabled)"]
         P2["Umami / GA4<br/>tracking"]
     end
 
@@ -54,6 +55,7 @@ flowchart TB
     S --> ANA
     S --> ADM
     AUTH --> P1
+    AUTH --> P3
     MGMT --> DB
     PUB --> DB
     ADM --> DB
@@ -183,12 +185,16 @@ sequenceDiagram
     end
 
     rect rgb(255, 248, 240)
-    Note over U,P: Social login (backend-only — no frontend button or /oauth2/ proxy route ships)
-    U->>F: [planned] Choose Sign in with Google or GitHub
-    F->>P: [planned] Redirect to /oauth2/authorize/google
-    P-->>API: Callback /oauth2/callback/google
-    API->>DB: Find or create user by email (provider fields recorded)
-    API-->>F: Redirect with JWT plus refresh cookie
+    Note over U,P: Social login (Keycloak/OIDC; opt-in via env flags)
+    U->>F: Choose "Sign in with Keycloak" (button rendered only when enabled)
+    F->>API: Full-page GET /oauth2/authorize/keycloak + redirect_uri (SPA origin)
+    API-->>P: Redirect to IdP authorization endpoint
+    P-->>API: GET /oauth2/callback/keycloak (through proxy)
+    API->>DB: Link or create user (provider id + OIDC claims)
+    API-->>F: Redirect to /oauth2/redirect?token=<app JWT> + refresh cookie
+    F->>API: GET /me with token (mirror of password login)
+    F->>F: Publish auth state, navigate to dashboard
+    Note over U,P: SPA runtime config exposes only a boolean + provider id; no issuer URL or secret. Google/GitHub stay backend-only UI-wise.
     end
 
     rect rgb(255, 240, 245)

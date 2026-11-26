@@ -101,6 +101,16 @@ describe('router route-name registration (UAT-5 regression)', () => {
     }
   });
 
+  it('registers the social-login callback route ahead of the slug catch-all', () => {
+    expect(routerProduction.hasRoute('oauth2-redirect')).toBe(true);
+    expect(routerProduction.resolve({ name: 'oauth2-redirect' }).path).toBe('/oauth2/redirect');
+  });
+
+  it('reserves oauth2 so a portfolio cannot own the proxy/callback path', async () => {
+    const { RESERVED_SLUGS } = await import('@/router');
+    expect(RESERVED_SLUGS.has('oauth2')).toBe(true);
+  });
+
   it('a sidebar-style in-memory router still refuses unknown names (sanity that the throw is matcher-level)', async () => {
     const localRouter = createRouter({ history: createMemoryHistory(), routes: [{ path: '/x', name: 'x', component: {} }] });
     expect(localRouter.hasRoute('job-tracker')).toBe(false);

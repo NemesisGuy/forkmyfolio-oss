@@ -7,6 +7,7 @@ import com.forkmyfolio.service.GuestPassService;
 import com.forkmyfolio.service.UserService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.autoconfigure.security.oauth2.client.servlet.OAuth2ClientAutoConfiguration;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
@@ -24,7 +25,12 @@ import static org.springframework.security.test.web.servlet.request.SecurityMock
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
-@WebMvcTest(GuestPassController.class)
+// @WebMvcTest imports a curated auto-config set directly (bypassing
+// spring.autoconfigure.exclude). This slice does not exercise OAuth2 login,
+// so keep Boot's client-registration auto-config out — otherwise it tries to
+// resolve the harmless placeholder issuer over HTTP and fails the context.
+@WebMvcTest(controllers = GuestPassController.class,
+        excludeAutoConfiguration = OAuth2ClientAutoConfiguration.class)
 @AutoConfigureMockMvc
 @org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity
 class GuestPassControllerTest {

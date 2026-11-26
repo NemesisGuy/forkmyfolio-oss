@@ -47,6 +47,33 @@ server {
         proxy_set_header X-Forwarded-Proto $scheme;
     }
 
+    # OAuth2 / OIDC login endpoints (authorize + callback) go to the backend.
+    # No /oauth2/** request may fall through to Nuxt.
+    location /oauth2/ {
+        proxy_pass http://app;
+        proxy_http_version 1.1;
+        proxy_set_header Connection "";
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    # Exact-match exception: the SPA's post-login callback VIEW is not a backend
+    # endpoint. nginx prefers an exact `=` match over the prefix above, so
+    # /oauth2/redirect?token=... reaches the SPA without leaking the token to
+    # Nuxt or to a backend 404.
+    location = /oauth2/redirect {
+        proxy_pass http://frontend;
+        proxy_http_version 1.1;
+        proxy_set_header Connection "";
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        add_header Cache-Control "no-cache";
+    }
+
     # Authenticated routes to Vue SPA
     # Login / Register / Terms / Admin
     location ~ ^/(login|register|force-password-change|accept-terms|guest-access|admin) {

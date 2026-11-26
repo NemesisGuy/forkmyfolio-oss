@@ -3,6 +3,7 @@ package com.forkmyfolio.config;
 import com.forkmyfolio.security.JwtAuthenticationEntryPoint;
 import com.forkmyfolio.security.JwtAuthenticationFilter;
 import com.forkmyfolio.security.oauth2.CustomOAuth2UserService;
+import com.forkmyfolio.security.oauth2.CustomOidcUserService;
 import com.forkmyfolio.security.oauth2.HttpCookieOAuth2AuthorizationRequestRepository;
 import com.forkmyfolio.security.oauth2.OAuth2AuthenticationFailureHandler;
 import com.forkmyfolio.security.oauth2.OAuth2AuthenticationSuccessHandler;
@@ -48,6 +49,7 @@ public class SecurityConfig {
 
         // OAuth2 Components
         private final CustomOAuth2UserService customOAuth2UserService;
+        private final CustomOidcUserService customOidcUserService;
         private final OAuth2AuthenticationSuccessHandler oAuth2AuthenticationSuccessHandler;
         private final OAuth2AuthenticationFailureHandler oAuth2AuthenticationFailureHandler;
         private final HttpCookieOAuth2AuthorizationRequestRepository httpCookieOAuth2AuthorizationRequestRepository;
@@ -165,7 +167,8 @@ public class SecurityConfig {
                                                 .redirectionEndpoint(redirection -> redirection
                                                                 .baseUri("/oauth2/callback/*"))
                                                 .userInfoEndpoint(userInfo -> userInfo
-                                                                .userService(customOAuth2UserService))
+                                                                .userService(customOAuth2UserService)
+                                                                .oidcUserService(customOidcUserService))
                                                 .successHandler(oAuth2AuthenticationSuccessHandler)
                                                 .failureHandler(oAuth2AuthenticationFailureHandler));
 

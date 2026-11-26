@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { authService } from './authService';
+import { getMyAccount } from './api/user.api';
 import { usePublicPortfolioStore } from '@/stores/publicPortfolioStore';
 import { ApiError } from '@/services/api/ApiError';
 
@@ -77,5 +78,51 @@ describe('authService.clearLocalSession (guest-pass kick)', () => {
     expect(sessionStorage.getItem('accessToken')).toBeNull();
     expect(authService.isAuthenticated.value).toBe(false);
     expect(authService.getAccessToken()).toBeNull();
+  });
+});
+
+/**
+ * Social/OIDC handoff: the backend issues the app JWT and the SPA consumes it
+ * exactly as it would a password-login token (token -> getMyAccount -> state).
+ */
+describe('authService.loginWithToken (OAuth2 redirect handoff)', () => {
+  const account = { slug: 'oidc-user', roles: ['USER'] };
+
+  beforeEach(() => {
+    localStorage.clear();
+    sessionStorage.clear();
+    vi.clearAllMocks();
+    authService.clearLocalSession();
+  });
+
+  it('stores the token, fetches the account and publishes authenticated state', async () => {
+    vi.mocked(getMyAccount).mockResolvedValue(account as never);
+
+    await authService.loginWithToken('callback-jwt');
+
+    expect(getMyAccount).toHaveBeenCalledOnce();
+    expect(authService.getAccessToken()).toBe('callback-jwt');
+    expect(localStorage.getItem('accessToken')).toBe('callback-jwt');
+    expect(sessionStorage.getItem('accessToken')).toBeNull();
+    expect(authService.isAuthenticated.value).toBe(true);
+    expect(authService.user.value?.slug).toBe('oidc-user');
+  });
+
+  it('clears the half-established session and rethrows when the account fetch fails', async () => {
+    vi.mocked(getMyAccount).mockRejectedValue(new ApiError('Account unavailable', 500));
+
+    await expect(authService.loginWithToken('callback-jwt')).rejects.toThrow('Account unavailable');
+
+    expect(authService.getAccessToken()).toBeNull();
+    expect(localStorage.getItem('accessToken')).toBeNull();
+    expect(authService.isAuthenticated.value).toBe(false);
+    expect(authService.user.value).toBeNull();
+  });
+
+  it('rejects a blank token without fetching an account', async () => {
+    await expect(authService.loginWithToken('   ')).rejects.toThrow('Missing token');
+
+    expect(getMyAccount).not.toHaveBeenCalled();
+    expect(authService.isAuthenticated.value).toBe(false);
   });
 });

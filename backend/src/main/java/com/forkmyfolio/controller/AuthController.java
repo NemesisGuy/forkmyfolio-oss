@@ -18,6 +18,7 @@ import com.forkmyfolio.service.BackupTokenService;
 import com.forkmyfolio.service.GuestPassService;
 import com.forkmyfolio.service.RefreshTokenService;
 import com.forkmyfolio.service.impl.VisitorStatsService;
+import com.forkmyfolio.security.oauth2.RefreshTokenCookieFactory;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.Cookie;
@@ -35,7 +36,6 @@ import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -238,24 +238,8 @@ public class AuthController {
     }
 
     private ResponseCookie createRefreshTokenCookie(String token) {
-        long maxAge = StringUtils.hasText(token) ? appProperties.getJwt().getRefreshExpirationMs() / 1000 : 0;
-
-        ResponseCookie.ResponseCookieBuilder cookieBuilder = ResponseCookie
-                .from(appProperties.getJwt().getRefreshCookieName(), token)
-                .httpOnly(true)
-                .secure(appProperties.getCookie().isSecure())
-                .path("/")
-                .maxAge(maxAge)
-                .sameSite(appProperties.getCookie().getSamesite());
-
-        String cookieDomain = appProperties.getSecurity().getCookieDomain();
-        if (StringUtils.hasText(cookieDomain)) {
-            cookieBuilder.domain(cookieDomain);
-            logger.debug("Setting cookie with domain: {}", cookieDomain);
-        } else {
-            logger.debug("Setting cookie without a specific domain.");
-        }
-
-        return cookieBuilder.build();
+        // Shared with the OAuth2/OIDC success handler: identical attributes for
+        // password and social login (Secure/SameSite/Domain/HttpOnly/max-age).
+        return RefreshTokenCookieFactory.create(appProperties, token);
     }
 }

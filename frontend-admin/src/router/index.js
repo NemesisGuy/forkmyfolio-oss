@@ -11,11 +11,13 @@ const isAuthenticated = () => authService.isAuthenticated.value;
 const isAdmin = () => isAuthenticated() && authService.user.value?.roles.includes('ADMIN');
 
 // RESERVED SLUGS that cannot be used as portfolio identifiers
-const RESERVED_SLUGS = new Set([
+// `oauth2` is reserved because the reverse proxy routes /oauth2/** to the
+// backend and the SPA serves its callback view at /oauth2/redirect.
+export const RESERVED_SLUGS = new Set([
   'admin', 'manage', 'login', 'register', 'profile', 'settings', 'dashboard', 'home',
   'api', 'auth', 'public', 'user', 'users', 'account', 'terms', 'privacy', 'about',
   'contact', 'help', 'faq', 'blog', 'docs', 'support', 'sitemap', 'robots.txt',
-  'favicon.ico', '404', '500', 'assets', 'static', 'uploads', 'images', 'css', 'js',
+  'oauth2', 'favicon.ico', '404', '500', 'assets', 'static', 'uploads', 'images', 'css', 'js',
   'webfonts', 'fonts', 'data', 'exports', 'projects', 'skills', 'experience',
   'testimonials', 'qualifications', 'backup', 'display', 'pdf', 'stats', 'system-backup',
   'edit-account', 'edit-public-profile', 'messages', 'create', 'edit', 'force-password-change',
@@ -77,6 +79,13 @@ const routes = [
     path: '/guest-access',
     name: 'guest-access',
     component: () => import('@/views/public/GuestAccessPage.vue')
+  },
+  // Social/OIDC callback. The token is consumed by authService; the URL is
+  // replaced with the dashboard so it never stays in browser history.
+  {
+    path: '/oauth2/redirect',
+    name: 'oauth2-redirect',
+    component: () => import('@/views/auth/OAuth2RedirectPage.vue'),
   },
 
   // --- Authenticated User Routes ---

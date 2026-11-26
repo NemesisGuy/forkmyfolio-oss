@@ -12,21 +12,25 @@ import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.ResponseCookie;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
+import org.springframework.security.oauth2.core.oidc.user.OidcUser;
 import org.springframework.security.web.authentication.SimpleUrlAuthenticationSuccessHandler;
 import org.springframework.stereotype.Component;
 import org.springframework.web.util.UriComponentsBuilder;
 
 import java.io.IOException;
-import java.net.URI;
+import java.util.Map;
 import java.util.Optional;
 
 import static com.forkmyfolio.security.oauth2.HttpCookieOAuth2AuthorizationRequestRepository.REDIRECT_URI_PARAM_COOKIE_NAME;
 
 /**
- * Handles successful OAuth2 authentications.
- * Creates a JWT for the user and redirects them to the frontend application
- * with the token in the query parameters.
+ * Handles successful OAuth2/OIDC authentications: resolves the local account,
+ * issues a local JWT plus a hardened refresh cookie and redirects with
+ * {@code ?token=} (existing callback contract).
  */
 @Component
 @RequiredArgsConstructor
@@ -38,15 +42,9 @@ public class OAuth2AuthenticationSuccessHandler extends SimpleUrlAuthenticationS
     private final HttpCookieOAuth2AuthorizationRequestRepository httpCookieOAuth2AuthorizationRequestRepository;
     private final UserRepository userRepository;
 
-    /**
-     * This method is triggered when an OAuth2 authentication attempt is successful.
-     *
-     * @param request        the request which caused the successful authentication.
-     * @param response       the response.
-     * @param authentication the <tt>Authentication</tt> object which was created during the authentication process.
-     */
     @Override
-    public void onAuthenticationSuccess(HttpServletRequest request, HttpServletResponse response, Authentication authentication) throws IOException, ServletException {
+    public void onAuthenticationSuccess(HttpServletRequest request, HttpServletResponse response,
+            Authentication authentication) throws IOException, ServletException {
         String targetUrl = determineTargetUrl(request, response, authentication);
 
         if (response.isCommitted()) {
@@ -59,15 +57,11 @@ public class OAuth2AuthenticationSuccessHandler extends SimpleUrlAuthenticationS
     }
 
     /**
-     * Builds the target URL for redirection. This includes generating the JWT,
-     * creating a refresh token, and adding them to the response.
-     *
-     * @param request        the HTTP request.
-     * @param response       the HTTP response.
-     * @param authentication the Authentication object.
-     * @return The fully formed URL to redirect the user to.
+     * Builds the redirect URL: validates the requested redirect, resolves the
+     * local user, issues JWT + refresh cookie and appends {@code ?token=}.
      */
-    protected String determineTargetUrl(HttpServletRequest request, HttpServletResponse response, Authentication authentication) {
+    protected String determineTargetUrl(HttpServletRequest request, HttpServletResponse response,
+            Authentication authentication) {
         Optional<String> redirectUri = CookieUtils.getCookie(request, REDIRECT_URI_PARAM_COOKIE_NAME)
                 .map(Cookie::getValue);
 
@@ -76,21 +70,27 @@ public class OAuth2AuthenticationSuccessHandler extends SimpleUrlAuthenticationS
         }
 
         String targetUrl = redirectUri.orElse(getDefaultTargetUrl());
+        Long userId = resolveLocalUserId(authentication);
 
-        // The principal from OAuth2 authentication is a UserPrincipal.
-        UserPrincipal userPrincipal = (UserPrincipal) authentication.getPrincipal();
-        Long userId = userPrincipal.getId();
-
-        // RefreshTokenService requires the full User entity to create a token.
         User user = userRepository.findById(userId)
-                .orElseThrow(() -> new IllegalStateException("User not found with ID: " + userId + " after successful authentication."));
+                .orElseThrow(() -> new IllegalStateException(
+                        "User not found with ID: " + userId + " after successful authentication."));
+        if (!user.isActive()) {
+            throw new BadRequestException("This account is disabled. Please contact the administrator.");
+        }
 
-        String token = tokenProvider.createToken(authentication);
-        // Correctly call createRefreshToken with the User object.
+        // JwtTokenProvider accepts our UserPrincipal; for a plain OIDC
+        // principal we rebuild it from the freshly resolved local user.
+        UserPrincipal principalForToken = authentication.getPrincipal() instanceof UserPrincipal userPrincipal
+                ? userPrincipal
+                : UserPrincipal.create(user);
+        Authentication tokenAuthentication = new UsernamePasswordAuthenticationToken(
+                principalForToken, null, principalForToken.getAuthorities());
+        String token = tokenProvider.createToken(tokenAuthentication);
+
         String refreshToken = refreshTokenService.createRefreshToken(user).getToken();
-
-        // Add refresh token to a secure, HttpOnly cookie
-        CookieUtils.addCookie(response, appProperties.getJwt().getRefreshCookieName(), refreshToken, (int) (appProperties.getJwt().getRefreshExpirationMs() / 1000));
+        ResponseCookie cookie = RefreshTokenCookieFactory.create(appProperties, refreshToken);
+        response.addHeader(HttpHeaders.SET_COOKIE, cookie.toString());
 
         return UriComponentsBuilder.fromUriString(targetUrl)
                 .queryParam("token", token)
@@ -98,33 +98,48 @@ public class OAuth2AuthenticationSuccessHandler extends SimpleUrlAuthenticationS
     }
 
     /**
-     * Removes temporary authentication-related data that was stored in cookies.
-     *
-     * @param request  the HTTP request.
-     * @param response the HTTP response.
+     * Supports both principal shapes: our own UserPrincipal (raw OAuth2 and
+     * {@link OidcUserPrincipal}) and a foreign OIDC user carrying the local id
+     * stamped by {@link CustomOidcUserService}.
      */
+    private Long resolveLocalUserId(Authentication authentication) {
+        Object principal = authentication.getPrincipal();
+        if (principal instanceof UserPrincipal userPrincipal) {
+            return userPrincipal.getId();
+        }
+        if (principal instanceof OidcUser oidcUser) {
+            Map<String, Object> attributes = oidcUser.getAttributes();
+            Object localUserId = attributes == null
+                    ? null
+                    : attributes.get(OidcUserPrincipal.LOCAL_USER_ID_ATTRIBUTE);
+            Long parsed = parseLocalUserId(localUserId);
+            if (parsed != null) {
+                return parsed;
+            }
+            throw new BadRequestException(
+                    "OIDC principal is missing the local user id; refusing to issue a token.");
+        }
+        throw new BadRequestException("Unsupported principal type for social login: "
+                + (principal == null ? "null" : principal.getClass().getName()));
+    }
+
+    private Long parseLocalUserId(Object value) {
+        if (value instanceof Number number) {
+            return number.longValue();
+        }
+        if (value instanceof String text && text.matches("\\d+")) {
+            return Long.valueOf(text);
+        }
+        return null;
+    }
+
     protected void clearAuthenticationAttributes(HttpServletRequest request, HttpServletResponse response) {
         super.clearAuthenticationAttributes(request);
         httpCookieOAuth2AuthorizationRequestRepository.removeAuthorizationRequestCookies(request, response);
     }
 
-    /**
-     * Checks if the provided redirect URI is authorized in the application's configuration.
-     *
-     * @param uri The URI to check.
-     * @return true if the URI is authorized, false otherwise.
-     */
+    /** Shared allowlist check (also used by the failure handler). */
     private boolean isAuthorizedRedirectUri(String uri) {
-        URI clientRedirectUri = URI.create(uri);
-
-        return appProperties.getOauth2().getAuthorizedRedirectUris()
-                .stream()
-                .anyMatch(authorizedUri -> {
-                    URI authorizedURI = URI.create(authorizedUri);
-                    // Compare host, port, and scheme. Path is not compared to allow for deep linking.
-                    return authorizedURI.getHost().equalsIgnoreCase(clientRedirectUri.getHost())
-                            && authorizedURI.getPort() == clientRedirectUri.getPort()
-                            && authorizedURI.getScheme().equalsIgnoreCase(clientRedirectUri.getScheme());
-                });
+        return RedirectUriValidator.isAuthorizedRedirectUri(uri, appProperties);
     }
 }

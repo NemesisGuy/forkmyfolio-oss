@@ -150,6 +150,33 @@ async function login(credentials: Record<string, unknown>): Promise<void> {
 }
 
 /**
+ * Completes a social/OIDC login from the `/oauth2/redirect?token=...` callback.
+ * The backend has already issued the app JWT (and HttpOnly refresh cookie);
+ * this mirrors login(): set the token, fetch the account, then publish the
+ * authenticated state. No token/issuer value is stored beyond the access token.
+ * @param token - The app JWT returned by the OAuth2 success handler.
+ */
+async function loginWithToken(token: string): Promise<void> {
+  if (typeof token !== 'string' || !token.trim()) {
+    throw new Error('[AuthService] Missing token in social login callback.');
+  }
+
+  // Temporarily set the token so the account fetch is authenticated.
+  accessToken = token.trim();
+
+  try {
+    const freshUserAccount = await getMyAccount();
+    _updateAuthState(token.trim(), freshUserAccount as User);
+  } catch (error: unknown) {
+    // Never leave a half-authenticated state after a failed callback.
+    _clearAuthState();
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    console.error('[AuthService] Failed to complete social login:', message);
+    throw error;
+  }
+}
+
+/**
  * Logs out the user from the backend and clears local state.
  */
 async function logout(): Promise<void> {
@@ -269,6 +296,7 @@ export const authService = {
   getAccessToken: () => accessToken,
   // Actions
   login,
+  loginWithToken,
   loginAsGuest,
   logout,
   register,

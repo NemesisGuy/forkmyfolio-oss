@@ -6,6 +6,7 @@ import ThemeToggle from '~/components/ThemeToggle.vue';
 import ConfirmModal from '~/components/modals/ConfirmModal.vue';
 import { useTheme } from '~/composables/useTheme';
 import { usePortfolioSettings } from '~/composables/usePortfolioSettings';
+import { isSocialLoginEnabled } from '~/utils/socialLogin';
 
 /**
  * @file app/components/AppNavbar.vue
@@ -22,13 +23,21 @@ const RESERVED_SLUGS = new Set([
   'settings', 'profile', 'projects', 'skills', 'experience', 'qualifications', 'contact',
   'swagger-ui', 'v3', 'api-docs', 'h2-console', 'assets', 'static', 'images', 'css', 'js',
   'me', 'system', 'backup', 'restore', 'error', '404', 'config', 'internal', 'null', 'undefined',
-  'guest-access', 'accept-terms', 'force-password-change'
+  'guest-access', 'accept-terms', 'force-password-change',
+  // /oauth2/** is proxy/backend territory; the SPA owns /oauth2/redirect.
+  'oauth2'
 ]);
 
 const isReservedSlug = (s?: string) => !!s && RESERVED_SLUGS.has(s.toLowerCase());
 
 const { currentTheme } = useTheme();
 const route = useRoute();
+
+// Public runtime flag only — no token handling happens in Nuxt. The link
+// follows the same external-navigation pattern as logout, so nginx routes
+// /login to the Vue SPA instead of this app's [slug] catch-all.
+const runtimeConfig = useRuntimeConfig();
+const socialLoginEnabled = computed(() => isSocialLoginEnabled(runtimeConfig.public.socialLoginEnabled));
 
 interface NavUser {
   slug?: string | null;
@@ -174,6 +183,11 @@ const executeLogout = async () => {
     // load, which routes through nginx to the Vue auth app.
     await navigateTo('/login', { external: true });
   }
+};
+
+const goToSpaLogin = async () => {
+  collapseNavbar();
+  await navigateTo('/login', { external: true });
 };
 
 let debounceTimer: ReturnType<typeof setTimeout> | null = null;
@@ -387,6 +401,13 @@ onUnmounted(() => {
               <li class="nav-item">
                 <a href="/register" class="nav-link" @click="collapseNavbar">
                   Register
+                </a>
+              </li>
+              <li v-if="socialLoginEnabled" class="nav-item">
+                <!-- Optional, flag-gated entry point. The actual button and
+                     callback live in the Vue SPA. -->
+                <a href="/login" class="nav-link" @click.prevent="goToSpaLogin">
+                  Sign in with Keycloak
                 </a>
               </li>
             </template>

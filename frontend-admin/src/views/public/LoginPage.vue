@@ -45,6 +45,22 @@
               {{ isLoading ? 'Logging in...' : 'Login' }}
             </button>
           </form>
+
+          <!-- Social login is opt-in at container runtime. Only known provider
+               ids are rendered; the href is the backend's authorize endpoint,
+               never an IdP URL (which must stay out of built assets). -->
+          <template v-if="socialLoginEnabled && socialProviders.length > 0">
+            <div class="social-login-divider text-center my-3">
+              <span>or</span>
+            </div>
+            <a v-for="provider in socialProviders"
+               :key="provider"
+               :href="socialAuthorizeUrl(provider)"
+               class="btn btn-outline-primary w-100 mb-2 interactive-lift">
+              {{ getSocialProviderLabel(provider) }}
+            </a>
+          </template>
+
           <p class="mt-4 text-center">
             Don't have an account?
             <router-link to="/register">Sign Up</router-link>
@@ -84,10 +100,30 @@ import {usePublicPortfolioStore} from '@/stores/publicPortfolioStore.js';
 import {ApiError} from '@/services/api/index.js';
 import SuccessModal from '@/components/common/modals/SuccessModal.vue';
 import ErrorModal from '@/components/common/modals/ErrorModal.vue';
+import {
+  getSocialLoginConfig,
+  getSocialProviderLabel,
+  type SocialProviderId,
+} from '@/services/runtimeConfig';
 import type { User } from '@/types';
 
 const router = useRouter();
 const route = useRoute();
+
+// Runtime flags from public/config.js (injected by entrypoint.sh). Deny by
+// default: no buttons are rendered unless the deployment opts in.
+const socialConfig = getSocialLoginConfig();
+const socialLoginEnabled = socialConfig.enabled;
+const socialProviders = socialConfig.providers;
+
+/**
+ * The backend stores this `redirect_uri` in a short-lived cookie and sends the
+ * JWT there after the IdP callback. Deriving it from window.location.origin
+ * keeps deployment hostnames out of built assets; the backend allowlist
+ * (APP_OAUTH2_AUTHORIZEDREDIRECTURIS) must contain this exact URL.
+ */
+const socialAuthorizeUrl = (provider: SocialProviderId): string =>
+  `/oauth2/authorize/${provider}?redirect_uri=${encodeURIComponent(`${window.location.origin}/oauth2/redirect`)}`;
 
 const credentials = reactive({
   email: '',
@@ -266,6 +302,26 @@ const handleLogin = async () => {
 .invalid-feedback {
   color: var(--bs-danger);
   font-weight: 500;
+}
+
+.social-login-divider {
+  position: relative;
+  color: var(--bs-secondary-color, var(--bs-secondary));
+}
+
+.social-login-divider::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  border-top: 1px solid rgba(var(--bs-body-color-rgb), 0.15);
+}
+
+.social-login-divider span {
+  position: relative;
+  padding: 0 0.75rem;
+  background-color: rgba(var(--bs-body-bg-rgb), 1);
 }
 
 /* Ensure button visibility in light mode */

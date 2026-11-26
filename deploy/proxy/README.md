@@ -21,8 +21,12 @@ that fails `nginx -t` aborts the container start (fail-fast, visible in
 
 ## Modes
 
-- **same-host** — full routing: `/api/` → app; SPA/auth/manage/assets/`config.js`/favicon → frontend; everything else → Nuxt.
-- **detached** — `/api/` → app; everything else → Nuxt. No frontend upstream exists in this template, so the proxy starts cleanly without a frontend service.
+- **same-host** — full routing: `/api/` → app; `/oauth2/` → app (exact `/oauth2/redirect` → Vue SPA callback view); SPA/auth/manage/assets/`config.js`/favicon → frontend; everything else → Nuxt.
+- **detached** — `/api/` → app; `/oauth2/` → app; everything else → Nuxt. No frontend upstream exists in this template, so the proxy starts cleanly without a frontend service; the externally hosted SPA receives the OAuth2 redirect at its own origin.
+
+The proxy never sees IdP URLs or credentials: it only forwards the backend's
+`/oauth2/authorize/*` and `/oauth2/callback/*` endpoints (same header set as
+`/api/`). No `/oauth2/**` request falls through to Nuxt.
 
 ## Build
 

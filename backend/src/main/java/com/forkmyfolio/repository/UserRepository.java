@@ -2,6 +2,7 @@ package com.forkmyfolio.repository;
 
 import com.forkmyfolio.model.PublicPortfolioSummary;
 import com.forkmyfolio.model.User;
+import com.forkmyfolio.model.enums.AuthProvider;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -15,6 +16,9 @@ import java.util.UUID;
 public interface UserRepository extends JpaRepository<User, Long> {
 
         Optional<User> findByEmail(String email);
+
+        /** Social/OIDC linking: the provider's subject is authoritative. */
+        Optional<User> findByProviderAndProviderId(AuthProvider provider, String providerId);
 
         Optional<User> findBySlug(String slug);
 

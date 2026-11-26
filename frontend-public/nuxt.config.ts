@@ -41,7 +41,10 @@ export default defineNuxtConfig({
       // (set in the PRODUCTION compose) allows indexing; dev/staging compose
       // sets "false" and gets Disallow-all robots.txt, noindex meta,
       // X-Robots-Tag headers and a 404ing sitemap.
-      indexable: process.env.NUXT_PUBLIC_INDEXABLE || 'false'
+      indexable: process.env.NUXT_PUBLIC_INDEXABLE || 'false',
+      // Optional sign-in link on the public site. NON-SECRET flag only:
+      // no issuer URL / client id / secret belongs in the Nuxt bundle.
+      socialLoginEnabled: process.env.NUXT_PUBLIC_SOCIAL_LOGIN_ENABLED || 'false'
     },
     apiBaseUrl: process.env.NUXT_API_BASE_URL || 'http://app:8080/api/v1'
   }

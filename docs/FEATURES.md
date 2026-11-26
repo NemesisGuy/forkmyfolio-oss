@@ -19,13 +19,17 @@ whole installation.
 - **Login / logout** — stateless JWT **access token** plus an **httpOnly
   refresh-token cookie** with rotation: every refresh issues a new refresh
   token and invalidates the old one.
-- **Social login (OAuth2, backend-only)** — Google and GitHub OAuth2 client
-  handlers exist in the API: the authorization request is stashed in a
-  short-lived cookie, the account is linked or auto-created on callback, and a
-  JWT + refresh cookie are issued. **Neither frontend renders a sign-in button
-  or handles the callback, and the bundled nginx proxy does not route
-  `/oauth2/**`** — so social login is not usable through the example stack.
-  A Keycloak/OIDC integration is planned.
+- **Social login (OAuth2 / OIDC, opt-in)** — the stack ships the full
+  provider-neutral path, disabled by default. The API stashes the authorization
+  request in a short-lived signed cookie, links or creates the account on
+  callback, and issues a JWT + HttpOnly refresh cookie. The bundled nginx proxy
+  routes `/oauth2/**` to the backend (the SPA's `/oauth2/redirect` callback view
+  is served by the frontend in same-host mode). Enable the SPA button with
+  `VITE_SOCIAL_LOGIN_ENABLED=true` and `VITE_SOCIAL_PROVIDERS=keycloak`; the
+  optional Nuxt sign-in link uses `NUXT_PUBLIC_SOCIAL_LOGIN_ENABLED=true`. The
+  provider's client id/secret and issuer URI are configured only in `.env`
+  — never in a frontend build. The SPA currently surfaces only the `keycloak`
+  provider id; Google and GitHub registrations remain backend-only UI-wise.
 - **Password change** — authenticated users can change their own password
   (`password_last_changed_at` is tracked).
 - **Admin password reset** — an administrator can reset any user's password.
