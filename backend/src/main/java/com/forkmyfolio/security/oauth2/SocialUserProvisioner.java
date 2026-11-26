@@ -12,9 +12,11 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * Shared account-provisioning policy for both raw OAuth2 (Google/GitHub) and
@@ -145,6 +147,14 @@ public class SocialUserProvisioner {
         existingUser.setFirstName(firstName);
         existingUser.setLastName(lastName);
         existingUser.setProfileImageUrl(attribute(claims, "picture"));
+        // Local accounts are created with Set.of(...) (immutable). Hibernate's
+        // merge path clears/rebuilds the roles collection on save — an
+        // immutable set throws UnsupportedOperationException (HTTP 500 on the
+        // OAuth callback). Always hand it a mutable copy.
+        Set<Role> roles = existingUser.getRoles();
+        if (roles != null) {
+            existingUser.setRoles(new HashSet<>(roles));
+        }
         return userRepository.save(existingUser);
     }
 

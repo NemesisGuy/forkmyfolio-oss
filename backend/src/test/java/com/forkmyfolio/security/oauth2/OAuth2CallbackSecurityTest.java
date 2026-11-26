@@ -97,6 +97,21 @@ class OAuth2CallbackSecurityTest {
     }
 
     @Test
+    void redirectAllowlist_fallsBackToConfiguredCallbackHost_whenAllowlistIsStale() {
+        // Reproduces staging: APP_OAUTH2_AUTHORIZEDREDIRECTURIS still had the
+        // localhost default, but the configured Keycloak callback proves the
+        // trusted same-host origin.
+        properties.getOauth2().setAuthorizedRedirectUris(List.of(ALLOWED));
+        properties.getOauth2().setKeycloakRedirectUri(
+                "https://forkmyfolio-staging.nemesisnet.co.za/oauth2/callback/keycloak");
+
+        assertThat(RedirectUriValidator.isAuthorizedRedirectUri(
+                "https://forkmyfolio-staging.nemesisnet.co.za/oauth2/redirect", properties)).isTrue();
+        assertThat(RedirectUriValidator.isAuthorizedRedirectUri(
+                "https://evil.example.test/oauth2/redirect", properties)).isFalse();
+    }
+
+    @Test
     void redirectAllowlist_acceptsMatchingSchemeHostPortAndRejectsOthers() {
         assertThat(RedirectUriValidator.isAuthorizedRedirectUri(ALLOWED + "?x=1", properties)).isTrue();
         assertThat(RedirectUriValidator.isAuthorizedRedirectUri("http://localhost:5173/deep/link", properties)).isTrue();

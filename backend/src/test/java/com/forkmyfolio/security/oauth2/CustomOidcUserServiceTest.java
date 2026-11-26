@@ -189,6 +189,22 @@ class CustomOidcUserServiceTest {
     }
 
     @Test
+    void linkingConvertsImmutableRolesToMutableSet_beforeHibernateSave() {
+        OidcUser principal = oidcWith(claims());
+        User local = persistedUser(12L);
+        local.setProvider(AuthProvider.LOCAL);
+        local.setRoles(Set.of(Role.ADMIN)); // exactly how password registrations create roles
+        when(userRepository.findByProviderAndProviderId(AuthProvider.KEYCLOAK, "kc-sub-123"))
+                .thenReturn(Optional.empty());
+        when(userRepository.findByEmail("ada@example.test")).thenReturn(Optional.of(local));
+        when(userRepository.save(local)).thenReturn(local);
+
+        service.processOidcUser(userRequest, principal);
+
+        assertThat(local.getRoles()).isInstanceOf(HashSet.class).containsExactly(Role.ADMIN);
+    }
+
+    @Test
     void emailMatchingDifferentSubject_isRelinkedToCurrentIdentity() {
         OidcUser principal = oidcWith(claims());
         User otherKeycloakUser = persistedUser(10L);

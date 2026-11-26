@@ -14,6 +14,7 @@ import org.springframework.security.oauth2.core.oidc.user.OidcUser;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
@@ -92,6 +93,8 @@ class KeycloakOidcIntegrationTest extends AbstractMySqlIntegrationTest {
         String suffix = runSuffix();
         String email = "oidc-link-" + suffix + "@example.test";
         User local = seedUser(email, "oidc-link-" + suffix, false, Role.ADMIN);
+        // Real password registrations persist Set.of(...) roles — reproduce it.
+        local.setRoles(Set.of(Role.ADMIN));
         assertThat(local.getProvider()).isEqualTo(AuthProvider.LOCAL);
         String originalPasswordHash = local.getPassword();
 

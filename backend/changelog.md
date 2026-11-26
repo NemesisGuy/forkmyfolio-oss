@@ -2,6 +2,21 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.3.3] - 2026-11-26
+
+### 🐛 Bug Fixes
+
+- **OAuth callback HTTP 500 when linking an existing password account.** Local
+  accounts are created with an immutable `Set.of(...)` roles collection;
+  Hibernate's merge on save could clear it and throw
+  `UnsupportedOperationException`. The provisioner now always hands Hibernate a
+  mutable copy before saving an existing user, preserving the roles.
+- **OAuth callback HTTP 500 "Unauthorized Redirect URI" on same-host staging.**
+  When `APP_OAUTH2_AUTHORIZEDREDIRECTURIS` is stale/missing, the validator now
+  also trusts the operator-configured Keycloak callback host
+  (`APP_OAUTH2_KEYCLOAK_REDIRECT_URI`) for same-host SPA redirects. Foreign
+  origins are still rejected.
+
 ## [1.3.2] - 2026-11-26
 
 ### 🔄 Authentication

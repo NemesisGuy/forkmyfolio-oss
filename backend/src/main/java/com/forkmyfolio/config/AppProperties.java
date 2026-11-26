@@ -40,6 +40,8 @@ public class AppProperties {
     @Data
     public static class Oauth2 {
         private List<String> authorizedRedirectUris;
+        /** Callback base URI (same trusted host as the SPA in same-host mode). */
+        private String keycloakRedirectUri;
     }
 
     @Data

@@ -51,6 +51,27 @@ public final class RedirectUriValidator {
                 // A misconfigured allowlist entry must never authorize a redirect.
             }
         }
+        // Fallback for same-host deployments: the IdP callback URI is set by
+        // the operator and proves the trusted host, so accept the SPA callback
+        // origin even when the allowlist env var is stale/missing.
+        String callback = appProperties.getOauth2().getKeycloakRedirectUri();
+        if (StringUtils.hasText(callback)) {
+            try {
+                URI configured = URI.create(callback);
+                if (configured.getHost() != null && configured.getScheme() != null
+                        && sameOrigin(configured, clientRedirectUri)) {
+                    return true;
+                }
+            } catch (IllegalArgumentException ex) {
+                // A misconfigured callback must never authorize a redirect.
+            }
+        }
         return false;
+    }
+
+    private static boolean sameOrigin(URI authorized, URI clientRedirectUri) {
+        return authorized.getHost().equalsIgnoreCase(clientRedirectUri.getHost())
+                && authorized.getPort() == clientRedirectUri.getPort()
+                && authorized.getScheme().equalsIgnoreCase(clientRedirectUri.getScheme());
     }
 }
