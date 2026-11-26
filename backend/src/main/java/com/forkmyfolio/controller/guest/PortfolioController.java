@@ -22,6 +22,9 @@ import org.springframework.cache.Cache;
 import org.springframework.cache.CacheManager;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -55,6 +58,8 @@ public class PortfolioController {
                     + "Served through the Redis read-through cache (Phase 0.20, response-body "
                     + "caching Phase 0.23): the X-Cache response header reports HIT (served from "
                     + "cache), MISS (assembled and now cached) or BYPASS (cache not applicable). "
+                    + "Authenticated requests always BYPASS — the viewer-agnostic cache must never "
+                    + "hold an owner-view payload (SEC, 2026-11-24). "
                     + "A private portfolio is answered with a plain 404, indistinguishable from "
                     + "an unknown slug.")
     @TrackVisitor(VisitorStatType.TOTAL_VISITS)
@@ -79,7 +84,23 @@ public class PortfolioController {
         // the String cache unit simply supersedes any PortfolioDto objects
         // cached by the previous release (they are re-assembled and rewritten
         // as JSON on the next MISS).
-        Cache cache = cacheManager.getCache(PORTFOLIO_CACHE);
+        // SEC (2026-11-24, KNOWN_ISSUES §18): the key space is viewer-agnostic
+        // ("publicPortfolios::slug"), so only payloads that read identically for
+        // EVERY viewer may enter it. The service's Phase 7.4 owner-bypass answers
+        // a PRIVATE portfolio to its owner (and to a guest-pass bearer) with a
+        // 200 — caching that response would serve the owner's private payload to
+        // every subsequent anonymous reader (confirmed on DEV: owner GET 200 →
+        // anon GET 200 with X-Cache: HIT and isPublic=false). Only an
+        // authenticated principal can trigger the bypass, and an anonymous
+        // request can only ever assemble a PUBLIC payload (a private slug throws
+        // 404 before assembly, so nothing is ever written on that path) — so
+        // authenticated requests now skip the cache entirely (X-Cache: BYPASS)
+        // while anonymous requests keep the full HIT/MISS read-through. Every
+        // mutation path already @CacheEvicts this key, so the anonymous view can
+        // never go stale either.
+        Cache cache = isAuthenticatedPrincipal(SecurityContextHolder.getContext().getAuthentication())
+                ? null
+                : cacheManager.getCache(PORTFOLIO_CACHE);
 
         byte[] responseBody = null;
         String cacheOutcome;
@@ -146,5 +167,18 @@ public class PortfolioController {
                 .map(summary -> new PublicPortfolioSummaryDto(summary.slug(), summary.updatedAt()))
                 .toList();
         return ResponseEntity.ok(new ApiResponseWrapper<>(dtos));
+    }
+
+    /**
+     * SEC helper: {@code true} only for a REAL authenticated principal — the
+     * same {@code principal instanceof UserDetails} test that
+     * {@code UserServiceImpl#findCurrentAuthenticatedUser} uses. Anonymous
+     * requests carry the literal {@code "anonymousUser"} principal and resolve
+     * {@code false}, so they always take the cacheable HIT/MISS path.
+     */
+    private static boolean isAuthenticatedPrincipal(Authentication authentication) {
+        return authentication != null
+                && authentication.isAuthenticated()
+                && authentication.getPrincipal() instanceof UserDetails;
     }
 }

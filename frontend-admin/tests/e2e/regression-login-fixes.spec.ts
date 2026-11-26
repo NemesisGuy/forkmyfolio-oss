@@ -1,5 +1,9 @@
 import { test, expect, Page } from '@playwright/test';
 
+// Cluster A: this spec logs in itself, so it must start from a clean slate —
+// an inherited session redirects /login away from the form.
+test.use({ storageState: { cookies: [], origins: [] } });
+
 /**
  * @name Regression Login Fixes
  * @description Verifies fixes for the 500 portfolio error, announcement crashes, and guest pass modal hang.

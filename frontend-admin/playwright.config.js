@@ -22,6 +22,11 @@ export default defineConfig({
       use: {
         ...devices['Desktop Chrome'],
       },
+      // The setup project also seeds the shared e2e fixtures (projects/skills
+      // on the admin portfolio), so BOTH projects must wait for it — not just
+      // `authenticated`. Without this the anonymous project raced the seeder
+      // and specs such as verify-samples saw an empty projects grid.
+      dependencies: ['setup'],
     },
 
     // Authenticated project

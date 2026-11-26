@@ -1,5 +1,9 @@
 import { test, expect } from '@playwright/test';
 
+// Cluster A: this spec registers its own user, so it must start logged out —
+// an inherited session redirects /register away from the registration form.
+test.use({ storageState: { cookies: [], origins: [] } });
+
 test.describe('Navigation State Matrix', () => {
   const testUser = {
     email: `test-${Date.now()}@example.com`,
@@ -30,11 +34,28 @@ test.describe('Navigation State Matrix', () => {
     const termsModal = page.locator('.modal.show').filter({ hasText: 'Terms of Service' });
     await expect(termsModal).toBeVisible();
     await page.locator('#modalTermsCheck').check();
-    await page.locator('button', { hasText: 'Confirm & Create Account' }).click();
 
-    // Handle Success Modal
+    // Await the register RESPONSE before asserting the success modal: under a
+    // fullyParallel run the POST can take longer than the default 5s expect
+    // window (run F: registration succeeded — slug test-user-18, dialog on
+    // screen in the failure snapshot — but the modal rendered just after the
+    // window closed). Logging the status/body diagnoses future failures.
+    const registerResponse = page.waitForResponse(
+      resp => /\/auth\/register/.test(resp.url()) && resp.request().method() === 'POST'
+    );
+    await page.locator('button', { hasText: 'Confirm & Create Account' }).click();
+    const registered = await registerResponse;
+    console.log(`Register response: ${registered.status()} ${registered.url()}`);
+    if (!registered.ok()) {
+      console.log(`Register error body: ${await registered.text()}`);
+    }
+    expect(registered.ok()).toBeTruthy();
+
+    // Handle Success Modal — 10s, not the 5s default: the modal renders after
+    // the 201 + auto-login round-trip, which is load-sensitive (see
+    // TESTING_POLICY §4.1 "load-sensitive specs").
     const successModal = page.locator('.modal.show').filter({ hasText: 'Registration Successful' });
-    await expect(successModal).toBeVisible();
+    await expect(successModal).toBeVisible({ timeout: 10000 });
     await successModal.locator('button:has-text("Great!")').click();
 
     // Wait for redirect

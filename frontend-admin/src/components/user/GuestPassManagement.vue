@@ -91,7 +91,13 @@
               </div>
             </div>
             <div class="modal-footer border-top">
-              <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+              <!-- @click="hideCreateModal" mirrors the header X button: Bootstrap's
+                   Modal.hide() early-returns while the show transition is running
+                   (_isTransitioning), so a Cancel clicked during the ~300ms fade-in
+                   used to leave #createPassModal stuck open (e2e run D:
+                   regression-login-fixes, authenticated project). The manual
+                   cleanup below removes the show class/backdrop either way. -->
+              <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal" @click="hideCreateModal">Cancel</button>
               <button type="button" class="btn btn-primary px-4" @click="handleCreate" :disabled="!newPass.label">Create Pass</button>
             </div>
           </div>

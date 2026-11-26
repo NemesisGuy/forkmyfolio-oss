@@ -250,4 +250,54 @@ describe('JobApplicationList.vue (Phase 8.4)', () => {
     await btn.trigger('click');
     expect(downloadJobApplicationsCsv).not.toHaveBeenCalled();
   });
+
+  // --- KNOWN_ISSUES §17: light-mode washout (cosmetic-polish batch) ---
+
+  it('header, chips, toggle and empty states render theme-safe (KNOWN_ISSUES §17)', async () => {
+    const wrapper = await mountPage();
+
+    // No dark-background-only utilities anywhere in the rendered page — in
+    // LIGHT mode they render white-on-light and vanish (phase032-02 evidence).
+    const html = wrapper.html();
+    expect(html).not.toContain('btn-outline-light');
+    expect(html).not.toMatch(/text-white/);
+    expect(html).not.toContain('text-light');
+
+    // The page heading inherits the theme-aware body colour instead
+    expect(wrapper.find('h2').classes()).not.toContain('text-white');
+
+    // Inactive status chips + the board toggle use the house outline
+    const summary = wrapper.find('[data-testid="status-summary"]');
+    for (const chip of summary.findAll('button')) {
+      expect(chip.classes()).toContain('btn-outline-secondary');
+    }
+    expect(wrapper.find('[data-testid="view-board"]').classes())
+      .toContain('btn-outline-secondary');
+    // Active states keep the readable solid style
+    expect(wrapper.find('[data-testid="view-grid"]').classes()).toContain('btn-light');
+  });
+
+  it('both empty states use the semantic secondary colour', async () => {
+    const emptyWrapper = await mountPage([]);
+    expect(emptyWrapper.find('.text-body-secondary').exists()).toBe(true);
+    expect(emptyWrapper.html()).not.toMatch(/text-white/);
+
+    const noMatchWrapper = await mountPage();
+    await noMatchWrapper.find('#tracker-search').setValue('zzz-no-match');
+    expect(noMatchWrapper.find('.text-body-secondary').exists()).toBe(true);
+    expect(noMatchWrapper.html()).not.toMatch(/text-white/);
+  });
+
+  it('loading spinner is theme-visible (inherits body colour, no text-light)', async () => {
+    vi.mocked(jobApplicationService.getAll)
+      .mockReturnValue(new Promise(() => {}) as never); // stays pending → loading state
+    const wrapper = mount(JobApplicationList, {
+      global: { stubs: ['JobApplicationModal', 'JobApplicationDetailsModal'] },
+    });
+    await flushPromises(); // flush the re-render; the fetch itself never settles
+
+    const spinner = wrapper.find('.spinner-border');
+    expect(spinner.exists()).toBe(true);
+    expect(spinner.classes()).not.toContain('text-light');
+  });
 });

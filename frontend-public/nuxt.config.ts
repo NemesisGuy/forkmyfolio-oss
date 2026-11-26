@@ -13,7 +13,10 @@ export default defineNuxtConfig({
       title: 'ForkMyFolio',
       meta: [
         { charset: 'utf-8' },
-        { name: 'viewport', content: 'width=device-width, initial-scale=1' }
+        // `interactive-widget=resizes-content` keeps the on-screen keyboard from
+        // resizing/panning the layout viewport (pinned by
+        // tests/e2e/mobile-layout.spec.ts).
+        { name: 'viewport', content: 'width=device-width, initial-scale=1, interactive-widget=resizes-content' }
       ],
       link: [
         // UAT-3 FIX: SSR pages emitted no favicon link at all; browsers fell back

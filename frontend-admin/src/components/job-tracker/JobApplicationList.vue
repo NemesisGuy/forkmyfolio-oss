@@ -192,13 +192,13 @@ onMounted(() => {
 <template>
   <div class="container-fluid py-4">
     <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
-      <h2 class="mb-0 text-white"><Briefcase class="me-2" />Job Applications</h2>
+      <h2 class="mb-0"><Briefcase class="me-2" />Job Applications</h2>
       <div class="d-flex align-items-center gap-2">
         <div class="btn-group" role="group" aria-label="View mode" data-testid="view-toggle">
           <button
             type="button"
             class="btn btn-sm"
-            :class="viewMode === 'grid' ? 'btn-light' : 'btn-outline-light'"
+            :class="viewMode === 'grid' ? 'btn-light' : 'btn-outline-secondary'"
             data-testid="view-grid"
             @click="viewMode = 'grid'"
           >
@@ -207,7 +207,7 @@ onMounted(() => {
           <button
             type="button"
             class="btn btn-sm"
-            :class="viewMode === 'board' ? 'btn-light' : 'btn-outline-light'"
+            :class="viewMode === 'board' ? 'btn-light' : 'btn-outline-secondary'"
             data-testid="view-board"
             @click="viewMode = 'board'"
           >
@@ -222,7 +222,7 @@ onMounted(() => {
 
     <!-- Loading state -->
     <div v-if="loading" class="text-center py-5">
-      <div class="spinner-border text-light" role="status">
+      <div class="spinner-border" role="status">
         <span class="visually-hidden">Loading...</span>
       </div>
     </div>
@@ -239,7 +239,7 @@ onMounted(() => {
           v-for="status in APPLICATION_STATUS_ORDER"
           :key="status"
           class="btn btn-sm"
-          :class="statusFilter === status ? 'btn-light' : 'btn-outline-light'"
+          :class="statusFilter === status ? 'btn-light' : 'btn-outline-secondary'"
           type="button"
           @click="statusFilter = statusFilter === status ? 'ALL' : status">
           {{ STATUS_META[status].label }}
@@ -316,22 +316,22 @@ onMounted(() => {
               >
                 <FileDown class="me-1" :size="14" />Export CSV ({{ filteredApplications.length }})
               </button>
-              <button class="btn btn-sm btn-outline-light" type="button" @click="resetFilters">Reset filters</button>
+              <button class="btn btn-sm btn-outline-secondary" type="button" @click="resetFilters">Reset filters</button>
             </div>
           </div>
         </div>
       </div>
 
       <!-- Empty states -->
-      <div v-if="applications.length === 0" class="text-center py-5 text-white-50">
+      <div v-if="applications.length === 0" class="text-center py-5 text-body-secondary">
         <FileX class="fs-1 mb-3 d-block" />
         <p class="lead">No applications tracked yet. Start your journey!</p>
-        <button class="btn btn-outline-light mt-2" @click="openCreateModal">Track First Application</button>
+        <button class="btn btn-outline-secondary mt-2" @click="openCreateModal">Track First Application</button>
       </div>
-      <div v-else-if="filteredApplications.length === 0" class="text-center py-5 text-white-50">
+      <div v-else-if="filteredApplications.length === 0" class="text-center py-5 text-body-secondary">
         <Search class="fs-1 mb-3 d-block" />
         <p class="lead">No applications match your search or filters.</p>
-        <button class="btn btn-outline-light mt-2" @click="resetFilters">Clear filters</button>
+        <button class="btn btn-outline-secondary mt-2" @click="resetFilters">Clear filters</button>
       </div>
 
       <!-- Views (grid / board) — shares the empty-state v-else chain above -->

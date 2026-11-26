@@ -20,7 +20,7 @@ test('Verify Rich Media with Mocked API', async ({ page }) => {
         title: 'Glassmorphic UI Kit',
         displayOrder: 2,
         visible: true,
-        mediaUrl: 'https://giphy.com/gifs/code-ui-animation-3o7TKTnXz5y6zY5P6E',
+        mediaUrl: 'https://media.giphy.com/media/3o7TKTnXz5y6zY5P6E/giphy.gif',
         skills: []
       },
       {

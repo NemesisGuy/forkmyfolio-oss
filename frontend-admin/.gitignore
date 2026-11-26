@@ -31,6 +31,8 @@ coverage
 
 test-results/
 playwright-report/
+# Playwright auth state (localStorage JWTs) — never commit, inner repo is public
+playwright/
 
 # Documentation Drafts
 docs/*_draft.md

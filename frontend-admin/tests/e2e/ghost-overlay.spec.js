@@ -1,5 +1,9 @@
 import { test, expect } from '@playwright/test';
 
+// Cluster A: this spec drives its own (failing) login, so it must start from a
+// clean slate — an inherited session redirects /login away from the form.
+test.use({ storageState: { cookies: [], origins: [] } });
+
 test.describe('Ghost Overlay Detection', () => {
   test('should clear modal backdrop when navigating back from login error', async ({ page }) => {
     // 0. Visit home first so we have a place to go back to

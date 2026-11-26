@@ -1,8 +1,8 @@
 <template>
   <div class="accept-terms-page py-5 flex-grow-1">
     <div class="container text-center">
-      <h1 class="text-white mb-3" style="font-weight: 600;">Welcome!</h1>
-      <p class="text-white-50">
+      <h1 class="mb-3" style="font-weight: 600;">Welcome!</h1>
+      <p class="text-body-secondary">
         Before you can proceed, please review and accept our terms of service.
       </p>
     </div>

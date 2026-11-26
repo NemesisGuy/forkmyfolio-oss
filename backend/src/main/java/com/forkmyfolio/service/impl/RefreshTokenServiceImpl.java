@@ -49,14 +49,25 @@ public class RefreshTokenServiceImpl implements RefreshTokenService {
 
     /**
      * {@inheritDoc}
-     * This implementation will delete any existing refresh token for the user before creating a new one,
-     * enforcing a one-active-refresh-token-per-user policy.
+     * This implementation invalidates any existing refresh tokens for the user
+     * before creating a new one, enforcing a one-active-refresh-token-per-user
+     * policy.
+     *
+     * <p>Concurrency: the invalidation MUST be the idempotent bulk delete
+     * ({@code DELETE ... WHERE user_id = ?}), never a load-then-entity-delete.
+     * Two logins for the same user (two tabs/devices, or parallel e2e specs)
+     * used to load the same row and race: the loser's entity delete affected 0
+     * rows, which Hibernate reports as {@code ObjectOptimisticLockingFailureException}
+     * ("delete from refresh_tokens where id=?") and the login failed with HTTP
+     * 500 (run D: visual-proof). Bulk DML treats a 0-row delete as success, so
+     * concurrent logins both complete; the newest token wins and the transient
+     * extra row (if any) is cleared by the next rotation.
      */
     @Override
     @Transactional
     public RefreshToken createRefreshToken(User user) {
         // Invalidate existing tokens for the user to enforce one active refresh token per user
-        refreshTokenRepository.findByUser(user).ifPresent(refreshTokenRepository::delete);
+        refreshTokenRepository.deleteByUser(user);
 
         RefreshToken refreshToken = new RefreshToken();
         refreshToken.setUser(user);
@@ -91,11 +102,15 @@ public class RefreshTokenServiceImpl implements RefreshTokenService {
 
     /**
      * {@inheritDoc}
+     * Bulk delete by token string — same race rationale as
+     * {@link #createRefreshToken}: the old load-then-entity-delete emitted
+     * {@code DELETE ... WHERE id = ?} with a row-count expectation, so a token
+     * already invalidated by a concurrent rotation made logout fail.
      */
     @Override
     @Transactional
     public void deleteByToken(String token) {
-        refreshTokenRepository.findByToken(token).ifPresent(refreshTokenRepository::delete);
+        refreshTokenRepository.deleteByToken(token);
     }
 
     /**
@@ -104,8 +119,11 @@ public class RefreshTokenServiceImpl implements RefreshTokenService {
     @Override
     @Transactional
     public RefreshToken rotateRefreshToken(RefreshToken oldToken) {
-        // 1. Delete the old token that was just used.
-        refreshTokenRepository.delete(oldToken);
+        // 1. Delete the old token that was just used — by token STRING (idempotent
+        //    bulk DML), not as a managed entity: two refreshes presenting the same
+        //    token concurrently used to race the entity delete into a
+        //    0-row ObjectOptimisticLockingFailureException.
+        refreshTokenRepository.deleteByToken(oldToken.getToken());
 
         // 2. Create a new token for the same user.
         RefreshToken newRefreshToken = new RefreshToken();

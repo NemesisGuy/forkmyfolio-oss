@@ -1,5 +1,9 @@
 import { test, expect, Page } from '@playwright/test';
 
+// Cluster A: this spec registers its own users, so it must start logged out —
+// an inherited session redirects /register away from the registration form.
+test.use({ storageState: { cookies: [], origins: [] } });
+
 test.describe('Critical Path: Multi-User Profile Visibility', () => {
 
   // --- Helper Functions ---
@@ -196,10 +200,17 @@ test.describe('Critical Path: Multi-User Profile Visibility', () => {
     // Visit B's public project page
     await page.goto(`/${slugB}/projects`);
 
-    // Expect 'Portfolio Restricted' page (since B is private)
-    await expect(page.locator('h2', { hasText: 'Portfolio Restricted' })).toBeVisible();
+    // Expect 'Unable to Load Projects' — Nuxt renders its error branch for a
+    // concealed (private) portfolio; the SPA's 'Portfolio Restricted' lock
+    // screen only exists in the retired Vue public site.
+    await expect(page.locator('h5', { hasText: 'Unable to Load Projects' })).toBeVisible();
     await expect(page.locator('text=Project B')).not.toBeVisible();
 
+    // The Logout menu item only exists in the SPA navbar; /{slug}/projects is
+    // Nuxt-served, whose navbar renders the dropdown item hidden. Return to the
+    // signed-in user's own manage area (an SPA route) before logging out.
+    await page.goto(`/${slugA}/manage/dashboard`);
+    await expect(page.locator('#navbarUserDropdown')).toBeVisible();
     await logout(page);
 
     // 4. User B logs in -> Views A (Public)
@@ -213,6 +224,9 @@ test.describe('Critical Path: Multi-User Profile Visibility', () => {
     await expect(page.locator('h1').filter({ hasText: 'Projects' })).toBeVisible();
     await expect(page.locator('.card-title', { hasText: `Project A (${slugA})` }).first()).toBeVisible();
 
+    // Same navbar constraint as above — log out from an SPA-served route.
+    await page.goto(`/${slugB}/manage/dashboard`);
+    await expect(page.locator('#navbarUserDropdown')).toBeVisible();
     await logout(page);
 
     // 5. Anonymous User -> Views A (Public) & B (Private)
@@ -224,7 +238,7 @@ test.describe('Critical Path: Multi-User Profile Visibility', () => {
 
     // Check B (Private) from Anonymous
     await page.goto(`/${slugB}/projects`);
-    await expect(page.locator('h2', { hasText: 'Portfolio Restricted' })).toBeVisible();
+    await expect(page.locator('h5', { hasText: 'Unable to Load Projects' })).toBeVisible();
     await expect(page.locator('text=Project B')).not.toBeVisible();
 
   });

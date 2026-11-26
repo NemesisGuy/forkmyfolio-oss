@@ -2,7 +2,10 @@ import { test, expect } from '@playwright/test';
 
 test.describe('Mobile Public Portfolio Regression', () => {
 
-  const slug = 'clark-kent'; // Known public user
+  // admin-user is the seeded e2e fixture portfolio (auth.setup.ts creates the
+  // three media projects plus a skill). The retired `clark-kent` sample data
+  // no longer exists.
+  const slug = 'admin-user';
 
   const devices = [
     { name: 'iPhone 5', width: 320, height: 568 },

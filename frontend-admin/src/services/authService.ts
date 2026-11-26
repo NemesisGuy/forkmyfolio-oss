@@ -91,7 +91,20 @@ function clearLocalSession(): void {
   _clearAuthState();
   // Reset the portfolio store to clear any previous user's data.
   const portfolioStore = usePublicPortfolioStore();
+  // GUEST-PASS KICK FIX: a revoked guest produces a 401 that the apiClient
+  // answers by calling this function. The router guard reads
+  // `store.error` AFTER `fetchPortfolio` settles to decide whether to bounce
+  // the guest to /guest-access?error=invalid — but the six parallel portfolio
+  // requests (and settingsService) each 401, so a later clearPortfolio()
+  // nulled the 401 the guard still needed. Preserve whatever error is already
+  // recorded; clearPortfolio() still drops the portfolio payload, slug and
+  // privacy flag, so no stale DATA survives — only the failure the guard has
+  // not acted on yet.
+  const pendingError = portfolioStore.error.value;
   portfolioStore.clearPortfolio();
+  if (pendingError) {
+    portfolioStore.error.value = pendingError;
+  }
 }
 
 /**

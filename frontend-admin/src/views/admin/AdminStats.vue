@@ -219,7 +219,7 @@
                 </template>
               </div>
               <div class="card-footer text-end border-0 bg-transparent">
-                <button :disabled="!isDirty || isSaving" class="btn btn-outline-light me-2"
+                <button :disabled="!isDirty || isSaving" class="btn btn-outline-secondary me-2"
                         type="button" @click="handleTestConnection">
                   <span v-if="isTesting" class="spinner-border spinner-border-sm me-2"></span>
                   Test Connection
@@ -268,7 +268,7 @@
                   Enable the Umami provider with reporting above to see site-wide visitor analytics here.
                 </p>
                 <div class="d-flex justify-content-center gap-3">
-                  <a href="https://umami.is/docs" target="_blank" class="btn btn-outline-light interactive-lift">
+                  <a href="https://umami.is/docs" target="_blank" class="btn btn-outline-secondary interactive-lift">
                     <Info class="me-2"/>Umami Documentation
                   </a>
                 </div>

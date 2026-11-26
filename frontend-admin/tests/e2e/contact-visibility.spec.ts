@@ -8,8 +8,12 @@ test.describe('Contact Form Visibility Audit', () => {
     await page.goto('/admin-user/contact');
 
     // 2. Check for the main container
+    // 15s, not the 5s default: under a fullyParallel run the SPA mounts well
+    // after the default window on a loaded machine (run D failed at 5000ms
+    // with the full contact page rendering immediately after — see
+    // TESTING_POLICY "load-sensitive specs").
     const container = page.locator('.contact-page');
-    await expect(container).toBeVisible();
+    await expect(container).toBeVisible({ timeout: 15000 });
 
     // 3. Verify the form exists and is visible
     const form = page.locator('form');

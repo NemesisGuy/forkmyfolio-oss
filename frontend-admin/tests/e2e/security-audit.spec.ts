@@ -1,5 +1,9 @@
 import { test, expect } from '@playwright/test';
 
+// Cluster A: this spec drives its own login, so it must start from a clean
+// slate — an inherited session redirects /login away from the form.
+test.use({ storageState: { cookies: [], origins: [] } });
+
 // Common test data
 const ATTACK_VECTORS = {
   SQLI_LOGIN: "' OR '1'='1",
@@ -13,7 +17,7 @@ test.describe('Security & Penetration Audit', () => {
   test.describe('SQL Injection (SQLi)', () => {
     test('Login form should reject SQLi payload', async ({ page }) => {
       await page.goto('/login');
-      await page.fill('#username', ATTACK_VECTORS.SQLI_LOGIN);
+      await page.fill('#email', ATTACK_VECTORS.SQLI_LOGIN);
       await page.fill('#password', 'randompass');
       await page.click('button[type="submit"]');
 
@@ -32,6 +36,15 @@ test.describe('Security & Penetration Audit', () => {
 
   test.describe('Cross-Site Scripting (XSS)', () => {
     test('Contact form inputs should escape HTML entities', async ({ page }) => {
+      // Load-sensitive budget (TESTING_POLICY §4.1): under a full-suite run the
+      // browser can queue this POST behind the page's other in-flight requests
+      // (6-connections-per-origin), so click → server receipt took ~15s in run J
+      // — landing at the exact moment the old fixed toast window closed. The
+      // save itself succeeded (201); only the assertion raced. Wait for the
+      // actual HTTP response instead (the test's stated intent: "ensure
+      // submission went through") and give the whole test more headroom.
+      test.setTimeout(60000);
+
       // Navigate to a valid contact form (e.g. admin's public profile)
       await page.goto('/admin-user/contact');
 
@@ -40,8 +53,19 @@ test.describe('Security & Penetration Audit', () => {
       await page.fill('#email', 'tester@example.com');
       await page.fill('#message', ATTACK_VECTORS.XSS_SCRIPT);
 
+      // Register the response listener BEFORE clicking so it can't be missed.
+      const contactPost = page.waitForResponse(
+        (res) => res.url().includes('/contact-messages') && res.request().method() === 'POST',
+        { timeout: 30000 }
+      );
+
       // Submit
       await page.click('button[type="submit"]');
+
+      // The backend must ACCEPT the submission (run J: a 201 can land after the
+      // old toast window closes — the toast then renders on a fresh clock).
+      const response = await contactPost;
+      expect(response.status()).toBe(201);
 
       // Verify success notification to ensure submission went through
       await expect(page.locator('.text-bg-success')).toBeVisible({ timeout: 15000 });

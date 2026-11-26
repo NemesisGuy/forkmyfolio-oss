@@ -7,14 +7,13 @@ test.describe('Contact Form Integrity', () => {
     // Using 'admin-user' slug as it likely exists from seed data
     await page.goto('/admin-user/contact');
 
-    // 2. Setup Route Interception to simulate a hang
-    // The backend endpoint is /api/v1/portfolios/{slug}/contact-messages
-    await page.route('**/contact-messages', async route => {
-      // Do not fulfill. Just wait.
-      // Or we can fulfill after 16 seconds to ensure the frontend timed out first.
-      await new Promise(resolve => setTimeout(resolve, 16000));
-      await route.fulfill({ status: 200, body: JSON.stringify({ message: "Too late" }) });
-    });
+    // 2. Setup Route Interception to simulate a hang.
+    // The backend endpoint is /api/v1/portfolios/{slug}/contact-messages.
+    // IMPORTANT: the route must NEVER settle. Fulfilling it late (e.g. after
+    // 16s) races the apiClient's own 15s abort — if the late 200 wins, the
+    // client reports success and no error toast is ever shown, which is what
+    // made this test flaky.
+    await page.route('**/contact-messages', () => new Promise(() => {}));
 
     // 3. Fill the form
     await page.fill('input#name', 'Test User');

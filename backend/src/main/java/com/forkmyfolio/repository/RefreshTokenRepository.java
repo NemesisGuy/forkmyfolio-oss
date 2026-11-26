@@ -25,16 +25,25 @@ public interface RefreshTokenRepository extends JpaRepository<RefreshToken, Long
     Optional<RefreshToken> findByToken(String token);
 
     /**
-     * Deletes all refresh tokens associated with a specific user.
-     * This is useful for scenarios like logout from all devices or when a user's account
-     * details (e.g., password) change.
-     * The {@link Modifying} annotation is required for DML operations.
+     * Deletes all refresh tokens associated with a specific user in ONE bulk
+     * statement ({@code DELETE ... WHERE user_id = ?}).
+     *
+     * <p>This is deliberately an explicit {@code @Query} bulk delete, NOT a
+     * derived {@code deleteByUser}: derived deletes are executed by loading the
+     * matching rows first and removing the entities one by one, which emits
+     * {@code DELETE ... WHERE id = ?} per row with a row-count expectation.
+     * Under concurrent logins for the same user (e2e run D: visual-proof login
+     * HTTP 500), the loser's per-row delete affected 0 rows and Hibernate
+     * surfaced {@code ObjectOptimisticLockingFailureException}
+     * ("delete from refresh_tokens where id=?"). A true bulk delete treats a
+     * 0-row match as success, so concurrent logins both complete.
      *
      * @param user The user whose refresh tokens are to be deleted.
      * @return The number of refresh tokens deleted.
      */
     @Modifying
-    int deleteByUser(User user);
+    @Query("DELETE FROM RefreshToken rt WHERE rt.user = :user")
+    int deleteByUser(@Param("user") User user);
 
     /**
      * Finds a refresh token by the associated User.
@@ -61,7 +70,17 @@ public interface RefreshTokenRepository extends JpaRepository<RefreshToken, Long
     @Query("SELECT rt FROM RefreshToken rt JOIN FETCH rt.user u JOIN FETCH u.roles WHERE rt.token = :token")
     Optional<RefreshToken> findByTokenAndFetchUserWithRoles(@Param("token") String token);
 
-
-    void deleteByToken(String token);
-
+    /**
+     * Deletes the token row for a single token string in ONE bulk statement.
+     * Same rationale as {@link #deleteByUser}: the derived form loaded the row
+     * and removed the entity (row-count expectation), so a token invalidated by
+     * a concurrent rotation turned the logout delete into
+     * {@code ObjectOptimisticLockingFailureException}. Bulk DML is idempotent.
+     *
+     * @param token The token string to delete.
+     * @return The number of refresh tokens deleted (0 or 1).
+     */
+    @Modifying
+    @Query("DELETE FROM RefreshToken rt WHERE rt.token = :token")
+    int deleteByToken(@Param("token") String token);
 }

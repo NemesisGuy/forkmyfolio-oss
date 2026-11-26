@@ -7,6 +7,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.security.core.context.SecurityContextHolder;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -29,6 +30,12 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  *       the existing {@code @CacheEvict} wiring — the next view is a MISS again and
  *       serves the FRESH data. No stale reads are possible.</li>
  *   <li>Unknown and private slugs are never cached (nothing is written on a 404).</li>
+ *   <li>SEC (2026-11-24): an AUTHENTICATED request (real JWT through the
+ *       production filter chain) always reports {@code X-Cache: BYPASS} and
+ *       never reads nor writes the viewer-agnostic key — otherwise the
+ *       owner-bypass view of a PRIVATE portfolio would be stored under
+ *       {@code publicPortfolios::<slug>} and served to the next anonymous
+ *       reader (the confirmed owner-view cache-poisoning leak).</li>
  * </ul>
  */
 public class PublicPortfolioCacheIntegrationTest extends AbstractMySqlIntegrationTest {
@@ -133,5 +140,71 @@ public class PublicPortfolioCacheIntegrationTest extends AbstractMySqlIntegratio
         mockMvc.perform(get("/api/v1/portfolios/{slug}", privateSlug))
                 .andExpect(status().isNotFound());
         assertThat(redisTemplate.hasKey(CACHE_KEY_PREFIX + privateSlug)).isFalse();
+    }
+
+    // ------------------------------------------------------------------
+    // SEC (2026-11-24): owner-view cache poisoning — THE regression pin
+    // ------------------------------------------------------------------
+
+    @Test
+    void ownerViewOfPrivatePortfolio_isServedButNeverCached_anonymousStillGets404() throws Exception {
+        String privateSlug = "sec-private-" + runSuffix();
+        User privateOwner = seedUser("sec-owner-" + runSuffix() + "@example.com", privateSlug, false);
+
+        // 1. The owner authenticates through the REAL login endpoint and the
+        //    request travels the production JWT filter chain (UserDetails
+        //    principal), exactly like the confirmed DEV exploit.
+        String jwt = realLogin(privateOwner.getEmail(), "Password123!");
+
+        // 2. Owner view: 200 (Phase 7.4 owner-bypass) but X-Cache: BYPASS —
+        //    the private payload must NOT be written to publicPortfolios::<slug>.
+        mockMvc.perform(get("/api/v1/portfolios/{slug}", privateSlug)
+                        .header("Authorization", "Bearer " + jwt))
+                .andExpect(status().isOk())
+                .andExpect(header().string("X-Cache", "BYPASS"))
+                .andExpect(jsonPath("$.status").value("success"));
+        assertThat(redisTemplate.hasKey(CACHE_KEY_PREFIX + privateSlug)).isFalse();
+
+        // 3. THE LEAK PIN: an anonymous reader immediately afterwards must get
+        //    the indistinguishable 404 — never the owner's private payload.
+        //    (MockMvc runs every request on this thread; a real container gives
+        //    each request a fresh SecurityContextHolder, so clear explicitly to
+        //    make the anonymous step genuinely anonymous.)
+        SecurityContextHolder.clearContext();
+        mockMvc.perform(get("/api/v1/portfolios/{slug}", privateSlug))
+                .andExpect(status().isNotFound());
+        assertThat(redisTemplate.hasKey(CACHE_KEY_PREFIX + privateSlug)).isFalse();
+
+        // 4. A second owner fetch must BYPASS again (no HIT could ever be
+        //    served from a stored private payload).
+        mockMvc.perform(get("/api/v1/portfolios/{slug}", privateSlug)
+                        .header("Authorization", "Bearer " + jwt))
+                .andExpect(status().isOk())
+                .andExpect(header().string("X-Cache", "BYPASS"));
+        assertThat(redisTemplate.hasKey(CACHE_KEY_PREFIX + privateSlug)).isFalse();
+    }
+
+    @Test
+    void authenticatedViewOfPublicPortfolio_alsoBypasses_anonymousMissHitCycleStillWorks() throws Exception {
+        // An authenticated reader never populates the shared cache — even for a
+        // PUBLIC slug — so the anonymous MISS → HIT read-through cycle (the
+        // performance contract of Phase 0.20) stays intact and anonymous-only.
+        String jwt = realLogin(owner.getEmail(), "Password123!");
+
+        mockMvc.perform(get("/api/v1/portfolios/{slug}", slug)
+                        .header("Authorization", "Bearer " + jwt))
+                .andExpect(status().isOk())
+                .andExpect(header().string("X-Cache", "BYPASS"));
+        assertThat(redisTemplate.hasKey(CACHE_KEY_PREFIX + slug)).isFalse();
+
+        SecurityContextHolder.clearContext();
+        mockMvc.perform(get("/api/v1/portfolios/{slug}", slug))
+                .andExpect(status().isOk())
+                .andExpect(header().string("X-Cache", "MISS"));
+        assertThat(redisTemplate.hasKey(CACHE_KEY_PREFIX + slug)).isTrue();
+
+        mockMvc.perform(get("/api/v1/portfolios/{slug}", slug))
+                .andExpect(status().isOk())
+                .andExpect(header().string("X-Cache", "HIT"));
     }
 }

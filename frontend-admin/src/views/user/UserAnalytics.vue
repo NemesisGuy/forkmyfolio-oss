@@ -178,7 +178,7 @@
                   </div>
                 </div>
                 <div class="card-footer text-end border-0 bg-transparent">
-                  <button :disabled="!isDirty || isSaving" class="btn btn-outline-light me-2" type="button"
+                  <button :disabled="!isDirty || isSaving" class="btn btn-outline-secondary me-2" type="button"
                           @click="handleTestConnection">
                     <span v-if="isTesting" class="spinner-border spinner-border-sm me-2"></span>
                     Test Connection

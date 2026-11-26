@@ -3,7 +3,9 @@ import { test, expect } from '@playwright/test';
 test.describe('Fast-Fail Validation', () => {
 
   test('Contact Form should block submission with invalid email', async ({ page }) => {
-    await page.goto('/public/admin-user/contact'); // Adjust path as needed
+    // NOTE: /admin-user/* is routed to the Vue SPA by nginx (the auth regex is
+    // unanchored), which is where the ContactPage form actually lives.
+    await page.goto('/admin-user/contact');
 
     // Fill with invalid email
     await page.fill('#name', ' Tester');
@@ -24,7 +26,7 @@ test.describe('Fast-Fail Validation', () => {
   });
 
   test('Contact Form should block empty fields', async ({ page }) => {
-      await page.goto('/public/admin-user/contact');
+      await page.goto('/admin-user/contact');
       // Click submit empty
       await page.click('button[type="submit"]');
 

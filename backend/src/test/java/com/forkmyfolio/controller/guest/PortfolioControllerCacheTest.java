@@ -16,6 +16,8 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.cache.Cache;
 import org.springframework.cache.CacheManager;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
@@ -70,6 +72,10 @@ class PortfolioControllerCacheTest {
 
     @BeforeEach
     void setUp() {
+        // MockMvc runs on the caller's thread, so a SecurityContext left behind
+        // by another test class would silently flip these tests onto the
+        // authenticated (SEC bypass) path — always start anonymous.
+        SecurityContextHolder.clearContext();
         // Real ObjectMapper (the controller serializes the wrapper on MISS);
         // everything else is the mock set above.
         portfolioController = new PortfolioController(portfolioService, portfolioMapper,
@@ -181,5 +187,36 @@ class PortfolioControllerCacheTest {
                 .andExpect(status().isOk())
                 .andExpect(header().string("X-Cache", "MISS"))
                 .andExpect(jsonPath("$.status").value("success"));
+    }
+
+    @Test
+    void authenticatedRequest_bypassesTheCache_entirely_neverReadsNorWrites() throws Exception {
+        // SEC (2026-11-24, KNOWN_ISSUES §18): only an authenticated principal
+        // can trigger the service's owner-bypass (a PRIVATE portfolio served
+        // to its owner), so authenticated requests must not touch the
+        // viewer-agnostic cache AT ALL — a put here would serve the owner's
+        // private payload to the very next anonymous reader (the exploit
+        // confirmed on DEV: owner GET 200 → anon GET 200, X-Cache: HIT).
+        user = initializedPublicUser("unit-slug");
+        when(portfolioService.getPublicPortfolioUserBySlug("unit-slug")).thenReturn(user);
+        when(userSkillService.getUserSkillLookupMap(user)).thenReturn(Collections.emptyMap());
+        when(portfolioMapper.toDto(eq(user), any())).thenReturn(dto);
+
+        SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(
+                new org.springframework.security.core.userdetails.User(
+                        "owner@unit.test", "n/a", Collections.emptyList()),
+                null, Collections.emptyList()));
+        try {
+            mockMvc.perform(get("/api/v1/portfolios/{slug}", "unit-slug"))
+                    .andExpect(status().isOk())
+                    .andExpect(header().string("X-Cache", "BYPASS"));
+        } finally {
+            SecurityContextHolder.clearContext();
+        }
+
+        // Not even the cache-manager LOOKUP may happen on the authenticated path.
+        verify(cacheManager, never()).getCache(anyString());
+        verify(cache, never()).get(anyString());
+        verify(cache, never()).put(anyString(), any());
     }
 }

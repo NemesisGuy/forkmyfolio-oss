@@ -1,4 +1,20 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
+
+/**
+ * Nuxt renders the public pages server-side: the navbar (including the
+ * `.theme-switch` toggle) exists in the HTML before Vue hydrates it, so an
+ * early click is swallowed — no change listener is attached yet. Vue sets
+ * `__vue_app__` on the mount container when `app.mount()` completes, which is
+ * the signal to wait for before interacting (run I: pre-hydration click left
+ * `data-bs-theme="light"` for the full 5s window).
+ */
+const waitForNuxtHydration = async (page: Page) => {
+  await page.waitForFunction(() => {
+    const root = document.getElementById('__nuxt') as
+      (HTMLElement & { __vue_app__?: unknown }) | null;
+    return Boolean(root && root.__vue_app__);
+  });
+};
 
 test.describe('Theme & Visibility Regression', () => {
   test('should have readable private message and correct footer position in Light Mode', async ({ page }) => {
@@ -12,6 +28,11 @@ test.describe('Theme & Visibility Regression', () => {
     // 2. Ensure Light Mode
     const themeBtn = page.locator('.theme-switch');
     await expect(themeBtn).toBeVisible();
+
+    // Nuxt SSR: the navbar and this toggle are in the server HTML, so they are
+    // clickable BEFORE hydration attaches Vue's handlers — wait for Vue's
+    // mount signal on the Nuxt root container first (see dark-mode test).
+    await waitForNuxtHydration(page);
 
     const currentTheme = await page.evaluate(() => document.documentElement.getAttribute('data-bs-theme'));
     if (currentTheme === 'dark') {
@@ -63,10 +84,18 @@ test.describe('Theme & Visibility Regression', () => {
     const themeBtn = page.locator('.theme-switch');
     await expect(themeBtn).toBeVisible();
 
+    // The toggle is SSR-rendered — don't touch it before hydration (helper
+    // above documents the race), and re-read the theme only after it.
+    await waitForNuxtHydration(page);
+
     const currentTheme = await page.evaluate(() => document.documentElement.getAttribute('data-bs-theme'));
     if (currentTheme !== 'dark') {
-      await themeBtn.click();
-      await expect(page.locator('html')).toHaveAttribute('data-bs-theme', 'dark');
+      // Retry the toggle until it actually takes effect: a click can still
+      // race the client-side theme initialisation even after hydration (run I).
+      await expect(async () => {
+        await themeBtn.click();
+        await expect(page.locator('html')).toHaveAttribute('data-bs-theme', 'dark', { timeout: 1500 });
+      }).toPass({ timeout: 15000 });
     }
 
     // 2. Verify Visibility

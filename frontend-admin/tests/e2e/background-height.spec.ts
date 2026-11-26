@@ -1,5 +1,10 @@
 import { test, expect, type Page } from '@playwright/test';
 
+// Cluster A: this spec logs in itself, so it must start from a clean slate.
+// Inheriting the `authenticated` project's storage state redirects /login to
+// the dashboard and the login form never renders.
+test.use({ storageState: { cookies: [], origins: [] } });
+
 test.describe('Background Height Verification', () => {
 
   const adminEmail = 'admin@forkmyfolio.com';
@@ -21,7 +26,9 @@ test.describe('Background Height Verification', () => {
     console.log(`Logged in, slug: ${slug}`);
 
     // 2. Navigate to Profile & Account
-    await page.goto(`/${slug}/manage/account`);
+    // Route note: /:slug/manage/account is NOT registered — the Profile & Account
+    // page (UserAccountPage.vue) lives at /:slug/manage/profile (router L147).
+    await page.goto(`/${slug}/manage/profile`);
 
     // 3. Wait for content
     const heading = page.locator('h1:has-text("Profile & Account")');

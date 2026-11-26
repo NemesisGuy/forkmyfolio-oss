@@ -2,7 +2,9 @@ import { test, expect } from '@playwright/test';
 
 test.describe('Rich Media Regression', () => {
 
-  const slug = 'clark-kent'; // Use a known public portfolio with samples
+  // admin-user is the seeded e2e fixture portfolio (auth.setup.ts creates the
+  // three media projects). The retired `clark-kent` sample data no longer exists.
+  const slug = 'admin-user';
 
   test('Verify YouTube Embed Rendering', async ({ page }) => {
     // Navigate to a project details page known to have YouTube

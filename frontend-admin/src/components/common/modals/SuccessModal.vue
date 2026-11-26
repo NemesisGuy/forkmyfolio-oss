@@ -50,6 +50,40 @@ const emit = defineEmits<{
 const modalRef = ref<HTMLElement | null>(null);
 let modalInstance: Modal | null = null;
 
+/**
+ * Dismiss the modal even when Bootstrap refuses to.
+ *
+ * <p>Bootstrap's `Modal.hide()` early-returns while the SHOW transition is
+ * running (`_isTransitioning`), so a Great!/Close click during the modal's
+ * ~300ms fade-in used to leave it stuck open forever: the click already
+ * emitted `close` (so `visible` went false and the watcher never re-fired),
+ * the hide no-opped, and nothing was left to ever remove the `show` class
+ * (e2e run G: success modal still on screen 5s after dismissal; the same
+ * race class as GuestPassManagement Cancel, fixed the same way).
+ */
+const dismiss = () => {
+  try {
+    modalInstance?.hide();
+  } catch {
+    // Instance may already be tearing down — the forced cleanup below still runs.
+  }
+
+  const el = modalRef.value;
+  // Only force when hide() actually no-opped (`show` still present). When the
+  // normal hide started, Bootstrap already removed `show` and the fade-out
+  // animation is left alone.
+  if (el && el.classList.contains('show')) {
+    el.classList.remove('show');
+    el.setAttribute('aria-hidden', 'true');
+    el.removeAttribute('aria-modal');
+    el.style.display = 'none';
+    document.querySelectorAll('.modal-backdrop').forEach(backdrop => backdrop.remove());
+    document.body.classList.remove('modal-open');
+    document.body.style.overflow = '';
+    document.body.style.paddingRight = '';
+  }
+};
+
 onMounted(() => {
   if (modalRef.value) {
     modalInstance = new Modal(modalRef.value);
@@ -72,12 +106,13 @@ watch(() => props.visible, (newVal) => {
   if (newVal) {
     modalInstance?.show();
   } else {
-    modalInstance?.hide();
+    dismiss();
   }
 });
 
 const handleClose = () => {
   emit('close');
+  dismiss();
 };
 </script>
 

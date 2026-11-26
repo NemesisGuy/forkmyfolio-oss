@@ -1,5 +1,9 @@
 import { test, expect } from '@playwright/test';
 
+// Cluster A: the liveness checks assert the LOGGED-OUT shell (/login form), so
+// they must not inherit the `authenticated` project's session.
+test.use({ storageState: { cookies: [], origins: [] } });
+
 /**
  * Phase 7.3 — Playwright revival smoke suite.
  *

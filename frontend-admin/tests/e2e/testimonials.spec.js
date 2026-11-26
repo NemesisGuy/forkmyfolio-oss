@@ -1,5 +1,9 @@
 import { test, expect } from '@playwright/test';
 
+// Cluster A: this spec registers its own user, so it must start logged out —
+// an inherited session redirects /register away from the registration form.
+test.use({ storageState: { cookies: [], origins: [] } });
+
 test.describe('Testimonials Page', () => {
   const timestamp = Date.now();
   const user = {
@@ -46,6 +50,23 @@ test.describe('Testimonials Page', () => {
       throw new Error(`Failed to extract valid real slug from path: ${dashboardUrl}`);
     }
     console.log(`Extracted real slug: ${realSlug}`);
+
+    // 1b. New portfolios are private by default, and the Nuxt testimonials page
+    //     never carries credentials (useApi.fetchJson attaches no token), so a
+    //     private portfolio 404s before the empty state can render. Publish it
+    //     through the API first so the "No Testimonials Yet" branch is reachable.
+    const accessToken = await page.evaluate(() => localStorage.getItem('accessToken'));
+    const publishStatus = await page.evaluate(async (token) => {
+      const res = await fetch('/api/v1/me/profile/visibility', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ isPublic: true }),
+      });
+      return res.status;
+    }, accessToken);
+    if (publishStatus >= 300) {
+      throw new Error(`Failed to publish portfolio before testimonials check: HTTP ${publishStatus}`);
+    }
 
     // 2. Navigate to public testimonials page
     await page.goto(`/${realSlug}/testimonials`);

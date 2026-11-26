@@ -12,30 +12,35 @@ test.describe('Mobile Keyboard Layout Shift', () => {
 
     test('should use dvh units for root container min-height', async ({ page }) => {
         const appLayout = page.locator('#app-layout');
-        await expect(appLayout).toHaveCSS('min-height', /100dvh/); // Note: Browsers might compute this to px, so this is a best-effort check or we check the computed style via evaluate
+        await expect(appLayout).toBeVisible();
 
-        // rigorous check via evaluate because computed style returns pixels
-        // Check for dvh units in stylesheets
-        await page.evaluate(() => {
+        // 1. The stylesheet must DECLARE min-height in dvh units. Browsers
+        //    resolve dvh to px in getComputedStyle, and the layout's <style> is
+        //    scoped (so the selector is `#app-layout[data-v-…]`, not exactly
+        //    `#app-layout`) — therefore read the CSSOM declaration block rather
+        //    than asserting on the computed value.
+        const declaredBlock = await page.evaluate(() => {
             for (const sheet of Array.from(document.styleSheets)) {
                 try {
                     for (const rule of Array.from(sheet.cssRules)) {
-                        if (rule instanceof CSSStyleRule && rule.selectorText === '#app-layout') {
-                             if (rule.style.minHeight === '100dvh') return true;
+                        if (rule instanceof CSSStyleRule && rule.selectorText.includes('#app-layout')) {
+                            return rule.style.cssText;
                         }
                     }
                 } catch {
                     // ignore cross-origin failures
                 }
             }
-            return false;
+            return null;
         });
+        expect(declaredBlock).toMatch(/min-height:\s*100dvh/);
 
-        // If the above fails (due to bundling), we fallback to ensuring the element is at least window height
+        // 2. The computed min-height must resolve to at least the viewport
+        //    height (100dvh === viewport height in px on desktop).
+        const computedMinHeight = await appLayout.evaluate(
+            el => window.getComputedStyle(el).minHeight
+        );
         const viewportSize = page.viewportSize();
-        if (viewportSize) {
-           const box = await appLayout.boundingBox();
-           expect(box?.height).toBeGreaterThanOrEqual(viewportSize.height);
-        }
+        expect(parseFloat(computedMinHeight)).toBeGreaterThanOrEqual(viewportSize?.height ?? 0);
     });
 });

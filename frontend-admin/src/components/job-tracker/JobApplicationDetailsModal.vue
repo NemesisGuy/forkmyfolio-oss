@@ -201,7 +201,7 @@ const salaryLine = computed(() => {
               </div>
             </div>
 
-            <hr class="text-white-50" />
+            <hr class="text-body-secondary" />
 
             <!-- Notes Section -->
             <h5 class="mb-3"><FileText class="me-2" />Notes</h5>

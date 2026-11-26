@@ -26,21 +26,49 @@ test.describe('Announcement Persistence', () => {
     test.use({ storageState: 'playwright/.auth/user.json' });
 
     test.beforeEach(async ({ page }) => {
-        // Clear local storage before each test to ensure clean state
-        await page.addInitScript(() => {
-            localStorage.removeItem('forkmyfolio_read_announcements');
-        });
+        // Read state lives on the BACKEND, not in localStorage: the dropdown
+        // fetches GET /announcements (per-item `read` flag) and persists
+        // "Mark all as read" via POST /announcements/read/all. The old spec
+        // asserted `forkmyfolio_read_announcements`, a key that exists nowhere
+        // in the application — so it could only ever fail (run D).
+        //
+        // Stateful mock: the POST flips every item to read, and the GET (after
+        // a reload) reflects it — proving the same round-trip the real backend
+        // provides, since route handlers survive navigation/reload.
+        let readAll = false;
 
-        // Mock the API call with Regex to be safe
-        await page.route(/.*\/announcements/, async route => {
-            console.log('Intercepted request to:', route.request().url());
+        await page.route(/.*\/announcements.*/, async route => {
+            const request = route.request();
+            const url = request.url();
+            console.log('Intercepted request to:', url);
+
+            if (request.method() === 'POST' && /\/announcements\/read\/all\/?$/.test(url)) {
+                readAll = true;
+                await route.fulfill({
+                    status: 200,
+                    contentType: 'application/json',
+                    body: JSON.stringify({ status: 'success', data: null })
+                });
+                return;
+            }
+
+            if (request.method() === 'GET') {
+                await route.fulfill({
+                    status: 200,
+                    contentType: 'application/json',
+                    body: JSON.stringify({
+                        status: 'success',
+                        data: mockAnnouncements.map(a => ({ ...a, read: readAll }))
+                    })
+                });
+                return;
+            }
+
+            // Any other announcements call (e.g. per-item read) — accept harmlessly.
             await route.fulfill({
                 status: 200,
                 contentType: 'application/json',
-                body: JSON.stringify({
-                    status: 'success',
-                    data: mockAnnouncements
-                })
+                body: JSON.stringify({ status: 'success', data: null })
             });
         });
     });
@@ -49,47 +77,38 @@ test.describe('Announcement Persistence', () => {
         // Capture browser logs
         page.on('console', msg => console.log('BROWSER LOG:', msg.text()));
 
-        // 1. Go to homepage (using the authenticated state if available, or just public if announcements show there)
-        // Assuming announcements are visible to everyone or we need to login.
-        // Based on the component, it calls `getMyAnnouncements`. If unauthorized, it might fail or return empty.
-        // Let's assume we are testing as a logged in user or the endpoint allows it.
-        // For safety, we'll go to the login page first if needed, but let's try homepage first.
-        await page.goto('/');
+        // 1. Go to an authenticated SPA page. The Nuxt landing page (/) has no
+        // AnnouncementDropdown, so the badge can only be asserted on a page
+        // served by the Vue SPA with a logged-in navbar.
+        await page.goto('/admin-user/manage/dashboard');
 
         // 2. Initial State: Badge should show 2
+        // toContainText — the badge renders the count plus visually-hidden
+        // screen-reader text ("2 unread announcements"), so an exact toHaveText
+        // fails on the full accessible string.
         const badge = page.locator('.announcement-dropdown .badge.bg-danger');
         await expect(badge).toBeVisible();
-        await expect(badge).toHaveText('2');
+        await expect(badge).toContainText('2');
 
-        // 3. Open Dropdown
+        // 3. Open Dropdown — both items carry the unread dot
         await page.locator('#announcementDropdown').click();
+        const unreadDots = page.locator('.announcement-dropdown .unread-dot');
+        await expect(unreadDots).toHaveCount(2);
 
-        // 4. Click "Mark all as read"
+        // 4. Click "Mark all as read" -> POST /announcements/read/all (stateful mock)
         await page.getByText('Mark all as read').click();
 
-        // 5. Verify Badge Gone (Immediate UI update)
+        // 5. Verify Badge Gone (immediate UI update from the API round-trip)
         await expect(badge).not.toBeVisible();
+        await expect(unreadDots).toHaveCount(0);
 
-        // CHECK 1: Verify data is in LocalStorage BEFORE reload
-        const preReloadState = await page.evaluate(() => localStorage.getItem('forkmyfolio_read_announcements'));
-        if (!preReloadState || !preReloadState.includes('123e4567')) {
-             throw new Error(`PRE-RELOAD FAIL: LocalStorage was '${preReloadState}'`);
-        }
-
-        // 6. RELOAD PAGE
+        // 6. RELOAD PAGE — the route mock (and its readAll state) survives
+        // navigation, so the GET that follows is the "after" snapshot.
         await page.reload();
 
-        // 7. Verify Persistence
-        // Rely on expect retry mechanism instead of strict network idle
-
-
-        // CHECK 2: Verify data is in LocalStorage AFTER reload
-        const postReloadState = await page.evaluate(() => localStorage.getItem('forkmyfolio_read_announcements'));
-        if (!postReloadState || !postReloadState.includes('123e4567')) {
-             throw new Error(`POST-RELOAD FAIL: LocalStorage was '${postReloadState}'`);
-        }
-
+        // 7. Verify Persistence: read state came back from the API, so the
+        // badge and the unread dots must both stay gone after a fresh load.
         await expect(badge).not.toBeVisible();
+        await expect(unreadDots).toHaveCount(0);
     });
 });
-

@@ -1,5 +1,9 @@
 import { test, expect, Page } from '@playwright/test';
 
+// Cluster A: this spec registers its own owner, so it must start logged out —
+// an inherited session redirects /register away from the registration form.
+test.use({ storageState: { cookies: [], origins: [] } });
+
 test.describe('GuestPass System E2E', () => {
 
   const registerUser = async (page: Page) => {
@@ -174,9 +178,16 @@ test.describe('GuestPass System E2E', () => {
     await expect(passRow).not.toBeVisible({ timeout: 10000 });
     console.log('E2E: Pass row removed from UI');
 
-    // 4. Recruiter tries to navigate and should be kicked out
+    // 4. Recruiter tries to navigate and should be kicked out.
+    // Stay INSIDE the SPA: a full page load of /{slug}/projects is served by
+    // Nuxt (nginx `location /`), which never attaches the guest JWT and
+    // therefore cannot observe the revocation at all. The router guard only
+    // re-fetches (and kicks a revoked guest to /guest-access) once the store's
+    // per-slug cache is dropped, which visiting the landing page does.
     console.log('E2E: Verifying recruiter is kicked...');
-    await recruiterPage.goto(`/${slug}/projects`);
+    await recruiterPage.click('.navbar-brand');
+    await recruiterPage.waitForURL(url => url.pathname === '/', { timeout: 10000 });
+    await recruiterPage.goBack();
     // Wait for redirect
     await recruiterPage.waitForURL(url => url.pathname.includes('/guest-access'), { timeout: 20000 });
     await expect(recruiterPage.getByTestId('error-title')).toHaveText('Invalid Token', { timeout: 15000 });
