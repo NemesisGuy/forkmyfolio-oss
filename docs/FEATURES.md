@@ -1,8 +1,8 @@
 # ForkMyFolio — Feature List
 
 **Task:** D1 — feature list for the entire system (what the product does today).
-**Snapshot:** Phase 0.30 (November 2026), verified against the codebase and
-exercised on DEV.
+**Snapshot:** Phase 0.30 feature set; documentation corrected against the
+v1.2.11 code on 2026-11-26 (behaviour claims verified against source).
 
 ForkMyFolio is a self-hosted, multi-user portfolio platform. Each user builds
 a portfolio (profile, experience, projects, skills, qualifications,
@@ -19,20 +19,32 @@ whole installation.
 - **Login / logout** — stateless JWT **access token** plus an **httpOnly
   refresh-token cookie** with rotation: every refresh issues a new refresh
   token and invalidates the old one.
-- **Social login (OAuth2)** — *Sign in with Google* and *Sign in with GitHub*.
-  The authorization request is stashed in a short-lived cookie, the account is
-  linked or auto-created on callback, and the browser is redirected back with
-  a JWT + refresh cookie.
+- **Social login (OAuth2, backend-only)** — Google and GitHub OAuth2 client
+  handlers exist in the API: the authorization request is stashed in a
+  short-lived cookie, the account is linked or auto-created on callback, and a
+  JWT + refresh cookie are issued. **Neither frontend renders a sign-in button
+  or handles the callback, and the bundled nginx proxy does not route
+  `/oauth2/**`** — so social login is not usable through the example stack.
+  A Keycloak/OIDC integration is planned.
 - **Password change** — authenticated users can change their own password
   (`password_last_changed_at` is tracked).
-- **Admin password reset** — an administrator can reset any user's password,
-  which puts the account into a **force-password-change** state on next login.
+- **Admin password reset** — an administrator can reset any user's password.
+  The reset updates `password_last_changed_at`; it does **not** trigger the
+  force-password-change screen (only a freshly seeded admin with a null
+  timestamp is forced to change it on first login).
 - **Re-authentication for sensitive operations** — before exporting or
   restoring a backup the current password is re-verified and a short-lived
   **backup token** is issued (`POST /api/v1/auth/verify-password`).
 - **Password visibility toggle** in the backup password-verification modal.
-- **Rate limiting** — a Bucket4j-based filter runs after JWT authentication
-  and throttles abusive request patterns.
+- **Rate limiting** — a Bucket4j-based filter throttles public portfolio,
+  analytics and download traffic, plus (since v1.2.11) the unauthenticated
+  `/auth/login`, `/register` and `/guest-login` endpoints with a per-client-IP
+  budget (default 120 per 5 minutes, env-tunable). `/refresh-token` is exempt
+  (every SPA page load probes it; it only consumes a server-issued random
+  token). Client-supplied forwarding headers cannot be used to choose a fresh
+  bucket.
+- **Deactivation kills sessions** — deactivating a user revokes all refresh
+  tokens and rejects existing JWTs (including guest JWTs carrying that owner).
 
 ## 2. Roles & access control
 
@@ -93,7 +105,7 @@ All of the following are owned by the signed-in user and managed from the
   and to projects (many-to-many join tables), which powers grouped skill
   display and PDF/Markdown rendering.
 
-## 5. Public portfolio website (Nuxt 3 SSR)
+## 5. Public portfolio website (Nuxt 4 SSR)
 
 Public pages served for every published slug:
 
@@ -121,8 +133,10 @@ portfolio:
 - **Markdown** — GitHub-friendly `.md` export of the whole portfolio.
 - **vCard** — contact card (`.vcf`) generated from the profile.
 - **Cover letter** — exportable as its own PDF or merged into the portfolio
-  PDF (`export.coverletter.mode`: `OFF` / `IN_PDF` / `SEPARATE`), with an
-  optional public-visibility switch.
+  PDF (`export.coverletter.mode`: `OFF` / `IN_PDF` / `SEPARATE`). The
+  `export.coverletter.public` switch only allows the **merged** (`IN_PDF`)
+  cover letter in visitor downloads; the **separate** cover-letter PDF is
+  owner-only (404 to visitors) and is not counted as a visitor download.
 - **Export shaping** — `export.mode` (`FULL` / `BRIEF`) and per-section
   `export.section.*` toggles control how much detail the document contains.
 - **Visibility contract** — `PUBLIC` exports mirror exactly what the public
@@ -134,8 +148,11 @@ portfolio:
 - Owners mint **time-limited guest passes** (label + expiry) from the
   dashboard; each pass has a single secret token.
 - A visitor exchanges the token at `/guest-access` for a **read-only guest
-  JWT** scoped to the owner's account, letting them browse the owner's
-  dashboard content without an account.
+  JWT** scoped to the owner's account. Guests may call `GET /api/v1/me` and
+  other explicitly guest-permitted reads, but management controllers
+  (`/me/projects`, `/me/experiences`, guest-pass management, etc.) carry
+  `hasRole('USER')` and return 403 — so a guest does **not** get free access to
+  the whole owner dashboard.
 - Owners can list and revoke passes; guests can never see or manage them.
 
 ## 8. Contact & messaging
@@ -249,15 +266,19 @@ portfolio:
 
 ## 17. Platform & infrastructure
 
-- **Backend** — Spring Boot (Java 21) REST API under `/api/v1`, OpenAPI/Swagger
-  UI publicly reachable, actuator health endpoint.
-- **Databases** — MySQL 8 with **Flyway** migrations (`V1`–`V13`, additive
-  and idempotent where possible); **Redis 7** for the `publicPortfolios`
+- **Backend** — Spring Boot (Java 21) REST API under `/api/v1` and an actuator
+  health endpoint (internal-only through the bundled proxy). OpenAPI/Swagger
+  endpoints are `permitAll` at the backend but are **not routed by the bundled
+  nginx proxy** — reach them only on a deliberately exposed backend port.
+- **Databases** — MySQL 8 with **Flyway** migrations (`V1`–`V13` plus `V4_1`,
+  additive and idempotent where possible); **Redis 7** for the `publicPortfolios`
   cache, which is evicted on every content mutation so public reads are
-  always fresh.
-- **Three frontends** — Vue 3 admin SPA, Nuxt 3 SSR public site, both behind
-  a single nginx reverse proxy (same-host or detached mode, configuration
-  validated at container start).
+  always fresh. (`docker-compose.example.yml` sets
+  `SPRING_JPA_HIBERNATE_DDL_AUTO=update`, overriding the image's Flyway-only
+  `none` default.)
+- **Two frontends and a proxy** — Vue 3 admin SPA and Nuxt 4 SSR public site,
+  both behind a single nginx reverse proxy (same-host or detached mode,
+  configuration validated at container start).
 - **Docker Compose** deployment for the whole stack; `.env.example` documents
   every required variable.
 - **CORS** configurable per environment; **load-tests** folder holds stress

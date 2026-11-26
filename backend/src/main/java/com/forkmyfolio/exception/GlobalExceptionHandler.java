@@ -193,6 +193,20 @@ public class GlobalExceptionHandler implements ResponseBodyAdvice<Object> {
     }
 
     /**
+     * v1.2.11: a deactivated account is a 401, not an unexpected 500. Use the
+     * SAME generic message as bad credentials so the endpoint cannot be used
+     * to enumerate account states.
+     */
+    @ExceptionHandler(org.springframework.security.authentication.DisabledException.class)
+    @ResponseStatus(HttpStatus.UNAUTHORIZED)
+    public ApiResponseWrapper<Object> handleDisabledAccount(
+            org.springframework.security.authentication.DisabledException ex) {
+        log.warn("Login failed: deactivated account");
+        List<FieldErrorDto> errors = List.of(new FieldErrorDto("login", "Invalid email or password."));
+        return new ApiResponseWrapper<>(errors, "invalid_credentials");
+    }
+
+    /**
      * Handles token refresh failures.
      */
     @ExceptionHandler(TokenRefreshException.class)

@@ -5,8 +5,9 @@ portfolio content through an administration dashboard and publish it as a
 fast, server-rendered public website — with PDF, Markdown, and vCard export,
 optional web analytics, and full account backup/restore.
 
-> **Status:** release candidate. The project is being prepared for its first
-> open-source release; see [docs/](docs/) for curation notes.
+> **Status:** actively developed, with published stable releases. See
+> [`backend/changelog.md`](backend/changelog.md) and the repository tags for
+> release notes. **Live demo:** <https://forkmyfolio.nemesisnet.co.za/nemesis>.
 
 ## Core functionality
 
@@ -49,7 +50,7 @@ Three applications plus infrastructure, fronted by a single reverse proxy:
       ┌──────────────┐  ┌──────────────┐   ┌──────────────────┐
       │ frontend-    │  │ frontend-    │   │  backend (Spring │
       │ admin (Vue   │  │ public       │   │  Boot, Java 21)  │
-      │ 3 SPA) /admin│  │ (Nuxt 3 SSR) │   │  REST API /api/v1│
+      │ 3 SPA) /admin│  │ (Nuxt 4 SSR) │   │  REST API /api/v1│
       └──────────────┘  └──────────────┘   └───────┬──────────┘
                                                    ▼
                                      ┌────────────────────────┐
@@ -64,7 +65,7 @@ Three applications plus infrastructure, fronted by a single reverse proxy:
   administration, served by nginx. The API base URL is injected at container
   start (`entrypoint.sh` renders `config.js`), so one image works behind any
   proxy path.
-- **`frontend-public/`** — Nuxt 3 SSR application rendering the public
+- **`frontend-public/`** — Nuxt 4 SSR application rendering the public
   portfolio sites. It calls the backend server-side
   (`NUXT_API_BASE_URL=http://app:8080/api/v1`) and client-side
   (`NUXT_PUBLIC_API_BASE_URL=/api/v1`).
@@ -82,7 +83,7 @@ Three applications plus infrastructure, fronted by a single reverse proxy:
 | Database | MySQL 8 |
 | Cache | Redis 7 |
 | Admin frontend | Vue 3, Vite, Pinia, Bootstrap, Vitest, Playwright |
-| Public frontend | Nuxt 3 (SSR), Vitest |
+| Public frontend | Nuxt 4 (SSR), Vitest |
 | Proxy | nginx (envsubst templating, startup validation) |
 | Deployment | Docker, Docker Compose |
 
@@ -130,7 +131,7 @@ is missing.
 | `APP_COOKIE_SAMESITE`, `APP_SECURITY_COOKIE_DOMAIN` | Cookie hardening for detached/cross-site deployments |
 | `ANALYTICS_ENCRYPTION_KEY` | AES-256-GCM key, Base64, exactly 32 bytes (`openssl rand -base64 32`). Encrypts stored analytics provider credentials. **Rotating it invalidates stored analytics credentials.** |
 | `NUXT_PUBLIC_INDEXABLE` | `true` allows search-engine crawling of public sites; `false` for private deployments |
-| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`, `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` | **Optional** OAuth2 social login. Unset by default (the feature is inert). When enabling, also override `app.oauth2.authorized-redirect-uris` (env: `APP_OAUTH2_AUTHORIZEDREDIRECTURIS`, comma-separated) with your real post-login redirect, and register your public `/oauth2/callback/<provider>` URL with the provider — the built-in defaults point at localhost. |
+| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`, `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` | **Backend-only OAuth2 client** (Google/GitHub). No button or token handling ships in either frontend and the bundled proxy does not route `/oauth2/**`, so social login is **not usable through this example stack**. The backend handlers exist for a provider wired by a custom deployment; a Keycloak/OIDC integration is planned. When enabling a provider, override `app.oauth2.authorized-redirect-uris` (env: `APP_OAUTH2_AUTHORIZEDREDIRECTURIS`, comma-separated) and register the callback URL with the provider — the built-in defaults point at localhost. |
 
 The application database user is deliberately separate from the MySQL root
 account: the application never needs root privileges.
@@ -138,11 +139,11 @@ account: the application never needs root privileges.
 ## Initial admin setup
 
 The administrator account is provisioned from the `ADMIN_EMAIL` and
-`ADMIN_PASSWORD` environment variables. The backend **force-syncs the admin
-password from `ADMIN_PASSWORD` on every startup** — the `.env` value is the
-single source of truth. To change the admin password, change it in `.env`
-and restart the backend; changing it only in the UI will be reverted on the
-next restart.
+`ADMIN_PASSWORD` environment variables **only when no admin account exists yet**
+(set-once bootstrap). Once created, the stored password hash is left alone on
+restart: change it in the admin UI. A lost password requires a deliberate
+database reset; updating `ADMIN_PASSWORD` alone does **not** reset an existing
+account.
 
 Log in at the admin dashboard (served by the proxy on the same host) with
 those credentials.
@@ -155,7 +156,22 @@ those credentials.
   deployment.
 - Set `APP_COOKIE_SECURE=true` when serving over HTTPS, and configure
   `APP_SECURITY_COOKIE_DOMAIN` for cross-site (detached) deployments.
-- Refresh tokens are stored server-side and rotated; logout revokes them.
+- Refresh tokens are stored server-side and rotated; logout revokes them. Only
+  **one refresh token per user** is kept: logging in on a second device
+  invalidates the first device's refresh session (and the first device will be
+  asked to log in again when its access token expires). Deactivating an account
+  revokes its refresh tokens and rejects already-issued JWTs immediately.
+- The OAuth2 authorization-request cookie is **HMAC-signed JSON** keyed with the
+  JWT signing secret (no Java native deserialization). The bundled proxy does
+  not route `/oauth2/**`, so keep the backend port private unless you wire that
+  path deliberately.
+- Login, registration and guest-login are rate-limited per client IP (default
+  120 requests / 5 minutes, env-tunable). `/auth/refresh-token` is deliberately
+  exempt: every SPA page load probes it, it only consumes a server-issued
+  random token, and the one-active-token policy already bounds its impact.
+  Only nginx-appended proxy hops are trusted for client-IP resolution — client-
+  supplied `X-Forwarded-For` / `CF-Connecting-IP` values cannot select a
+  fresh bucket. Behind Docker NAT this is a per-host bucket by design.
 - Analytics provider credentials (Umami/GA4) are encrypted at rest with
   AES-256-GCM using `ANALYTICS_ENCRYPTION_KEY`.
 - The backend fails fast on startup if required secrets are missing rather
@@ -180,6 +196,9 @@ those credentials.
   false checksum mismatches caused by line-ending differences between
   development platforms and the container build; treat edits to
   already-applied migration files as forbidden, and prefer new migrations.
+  Note: `docker-compose.example.yml` sets `SPRING_JPA_HIBERNATE_DDL_AUTO=update`,
+  which **overrides** the image default (`none`) — set it to `none` (or
+  `validate`) in your own stack if you want Flyway to be the only schema writer.
 
 ## Backup and restore
 
@@ -249,9 +268,10 @@ vulnerabilities.
 - **`413 Request Entity Too Large` on backup restore** — the proxy's
   default upload ceiling is 25 MB (`CLIENT_MAX_BODY_SIZE`); raise it in the
   proxy service environment for larger backups.
-- **Cannot log in after changing the admin password in the UI** — the admin
-  password is force-synced from `ADMIN_PASSWORD` on every backend startup;
-  change it in `.env` and restart instead.
+- **Cannot log in as admin after deployment** — `ADMIN_PASSWORD` is applied
+  **once**, when the initial admin is seeded. If an admin already exists, change
+  the password in the admin UI (or reset the account deliberately); editing
+  `.env` alone will not reset it.
 
 ## Upgrading
 

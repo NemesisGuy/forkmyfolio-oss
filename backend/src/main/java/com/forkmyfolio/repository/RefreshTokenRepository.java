@@ -83,4 +83,24 @@ public interface RefreshTokenRepository extends JpaRepository<RefreshToken, Long
     @Modifying
     @Query("DELETE FROM RefreshToken rt WHERE rt.token = :token")
     int deleteByToken(@Param("token") String token);
+
+    /**
+     * Non-locking probe: does this user currently have any refresh token?
+     *
+     * <p>Used by {@code createRefreshToken} to SKIP the invalidation DELETE for
+     * token-less users (fresh registrations/logins) — v1.2.11 root-cause fix.
+     * {@code DELETE ... WHERE user_id = ?} on a user with NO rows still
+     * range-scans the {@code user_id} index up to the <b>supremum</b> and holds
+     * that gap X-lock until commit — exactly the gap a parallel registration's
+     * {@code INSERT} needs (insert-intention), so two fresh registrations
+     * deadlocked (MySQL error 1213, both waiting at {@code hex73757072656d756d})
+     * and one {@code /auth/register} returned HTTP 500. A plain SELECT is a
+     * non-locking consistent read under REPEATABLE READ (no gap locks), so the
+     * probe is free of locks and lets token-less users skip the delete —
+     * parallel inserts at the index end do not conflict with each other.
+     *
+     * @param user The user to probe.
+     * @return {@code true} if at least one refresh token exists for the user.
+     */
+    boolean existsByUser(User user);
 }

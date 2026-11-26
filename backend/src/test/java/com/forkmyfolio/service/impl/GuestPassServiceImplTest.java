@@ -87,6 +87,18 @@ class GuestPassServiceImplTest {
     }
 
     @Test
+    void validateToken_inactiveOwner_ThrowsException() {
+        // v1.2.11 SECURITY: a guest JWT carries the owner's identity — a
+        // deactivated owner must not be able to hand out guest sessions.
+        owner.setActive(false);
+        when(guestPassRepository.findByToken("valid-token")).thenReturn(Optional.of(guestPass));
+
+        AccessDeniedException ex = assertThrows(AccessDeniedException.class,
+                () -> guestPassService.validateToken("valid-token"));
+        assertTrue(ex.getMessage().contains("inactive"));
+    }
+
+    @Test
     void getMyGuestPasses_Success() {
         when(guestPassRepository.findByOwner(owner))
                 .thenReturn(Collections.singletonList(guestPass));

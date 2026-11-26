@@ -179,4 +179,52 @@ public class JwtAuthLifecycleIntegrationTest extends AbstractMySqlIntegrationTes
                                 .as("error payload must not contain the raw refresh token")
                                 .doesNotContain(refreshCookie.getValue());
         }
+
+        @Test
+        void deactivatedUser_oldJwtRefreshAndLoginAreAllRejected() throws Exception {
+                // v1.2.11 SECURITY pin: deactivation must end EVERY live session
+                // path — existing JWT, existing refresh token and fresh login.
+                String suffix = runSuffix();
+                String email = "deact-life-" + suffix + "@example.com";
+
+                com.forkmyfolio.model.User user = userRepository.save(com.forkmyfolio.model.User.builder()
+                                .firstName("Deac")
+                                .lastName("Test" + suffix)
+                                .email(email)
+                                .password(passwordEncoder.encode(PASSWORD))
+                                .slug("deact-life-" + suffix)
+                                .provider(com.forkmyfolio.model.enums.AuthProvider.LOCAL)
+                                .roles(java.util.Set.of(com.forkmyfolio.model.enums.Role.USER))
+                                .active(true)
+                                .emailVerified(true)
+                                .build());
+
+                MvcResult login = mockMvc.perform(post("/api/v1/auth/login")
+                                .contentType("application/json")
+                                .content("{\"email\": \"" + email + "\", \"password\": \"" + PASSWORD + "\"}"))
+                                .andExpect(status().isOk())
+                                .andReturn();
+                String jwt = objectMapper.readTree(login.getResponse().getContentAsString())
+                                .path("data").path("accessToken").asText();
+                Cookie refreshCookie = login.getResponse().getCookie("refreshToken");
+                assertThat(refreshCookie).isNotNull();
+
+                mockMvc.perform(get("/api/v1/me").header("Authorization", "Bearer " + jwt))
+                                .andExpect(status().isOk());
+
+                user.setActive(false);
+                userRepository.save(user);
+
+                // 1. Old JWT: cryptographically valid, but owner is inactive.
+                mockMvc.perform(get("/api/v1/me").header("Authorization", "Bearer " + jwt))
+                                .andExpect(status().isUnauthorized());
+                // 2. Old refresh token: verifyExpiration rejects inactive users.
+                mockMvc.perform(post("/api/v1/auth/refresh-token").cookie(refreshCookie))
+                                .andExpect(status().isUnauthorized());
+                // 3. Fresh password login: DisabledException.
+                mockMvc.perform(post("/api/v1/auth/login")
+                                .contentType("application/json")
+                                .content("{\"email\": \"" + email + "\", \"password\": \"" + PASSWORD + "\"}"))
+                                .andExpect(status().isUnauthorized());
+        }
 }

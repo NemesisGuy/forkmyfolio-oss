@@ -3,14 +3,19 @@ package com.forkmyfolio.util;
 import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
-import org.springframework.util.SerializationUtils;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.ResponseCookie;
 
-import java.util.Base64;
 import java.util.Optional;
 
 /**
  * Utility class for handling HTTP cookies.
- * Provides helper methods for adding, retrieving, deleting, and serializing/deserializing cookies.
+ * Provides helper methods for adding, retrieving, deleting cookies.
+ *
+ * <p>Native Java serialization helpers were removed in v1.2.11 — they were
+ * used to store an unsigned OAuth2 authorization request in a cookie, which
+ * exposed a deserialization-gadget attack path. See
+ * {@code OAuth2AuthorizationRequestCodec} for the signed-JSON replacement.
  */
 public class CookieUtils {
 
@@ -73,26 +78,19 @@ public class CookieUtils {
     }
 
     /**
-     * Serializes an object into a Base64-encoded string.
-     *
-     * @param object The object to serialize.
-     * @return A string representation of the serialized object.
+     * Adds a hardened cookie (Secure + SameSite configurable) via Set-Cookie.
+     * Used for short-lived OAuth2 state cookies, which must be HttpOnly and
+     * Lax so the IdP's cross-site GET callback still carries them.
      */
-    public static String serialize(Object object) {
-        return Base64.getUrlEncoder()
-                .encodeToString(SerializationUtils.serialize(object));
-    }
-
-    /**
-     * Deserializes a cookie's value back into an object.
-     *
-     * @param cookie The cookie to deserialize.
-     * @param cls    The class of the target object.
-     * @param <T>    The type of the target object.
-     * @return The deserialized object.
-     */
-    public static <T> T deserialize(Cookie cookie, Class<T> cls) {
-        byte[] data = Base64.getUrlDecoder().decode(cookie.getValue());
-        return cls.cast(SerializationUtils.deserialize(data));
+    public static void addCookie(HttpServletResponse response, String name, String value,
+                                 int maxAge, boolean secure, String sameSite) {
+        ResponseCookie cookie = ResponseCookie.from(name, value)
+                .path("/")
+                .httpOnly(true)
+                .secure(secure)
+                .sameSite(sameSite)
+                .maxAge(maxAge)
+                .build();
+        response.addHeader(HttpHeaders.SET_COOKIE, cookie.toString());
     }
 }

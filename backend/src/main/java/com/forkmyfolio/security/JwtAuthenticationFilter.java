@@ -140,13 +140,27 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                         // Fallback for environments without the repository (e.g. unit tests).
                         UserDetails loaded = customUserDetailsService.loadUserById(userId);
                         String ownerEmail = (loaded != null) ? loaded.getUsername() : String.valueOf(userId);
-                        userDetails = new UserPrincipal(userId, ownerEmail, null, true,
+                        boolean ownerEnabled = loaded != null && loaded.isEnabled();
+                        userDetails = new UserPrincipal(userId, ownerEmail, null, ownerEnabled,
                                 Collections.singletonList(new SimpleGrantedAuthority("ROLE_GUEST")));
                         logger.debug("JwtFilter: Access GRANTED via Guest Pass {} for owner: {}", guestPassUuid,
                                 ownerEmail);
                     }
                 } else {
                     userDetails = customUserDetailsService.loadUserById(userId);
+                }
+
+                // v1.2.11 SECURITY: deactivated users must not keep using an
+                // already-issued JWT/refresh session. UserPrincipal.isEnabled()
+                // mirrors User.active, including the guest path (the owner is
+                // the subject of a guest JWT).
+                if (userDetails == null || !userDetails.isEnabled()) {
+                    logger.warn("JwtFilter: Rejecting token for deactivated user {}", sub);
+                    response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+                    response.setContentType("application/json");
+                    response.getWriter()
+                            .write("{\"error\": \"Unauthorized\", \"message\": \"Account is inactive\"}");
+                    return;
                 }
 
                 UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(

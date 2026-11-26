@@ -55,6 +55,15 @@ test.describe('GuestPass System E2E', () => {
     await page.goto(`/${slug}/manage/guest-passes`);
     await expect(page.locator('h1', { hasText: 'Guest Pass Management' })).toBeVisible();
 
+    // Owner positive control (v1.2.11 guest-pass menu fix): the owner-only
+    // items must be VISIBLE for a real owner — the guest gates below are
+    // role-based, not blanket-hidden.
+    await page.click('#navbarUserDropdown');
+    const ownerDropdown = page.locator('.glass-dropdown');
+    await expect(ownerDropdown.locator('.dropdown-item', { hasText: 'Display Settings' })).toBeVisible();
+    await expect(ownerDropdown.locator('.dropdown-item', { hasText: 'My Public Page' })).toBeVisible();
+    await page.keyboard.press('Escape');
+
     // 2. Owner creates a pass
     await page.click('button:has-text("Create New Pass")');
     await page.fill('input[placeholder*="Google Recruiter"]', 'E2E Test Pass');
@@ -87,9 +96,18 @@ test.describe('GuestPass System E2E', () => {
     // 5. Verify Security
     await recruiterPage.click('#navbarUserDropdown');
     const dropdown = recruiterPage.locator('.glass-dropdown');
+    // Positive control: the dropdown really is open for the guest (otherwise
+    // every "not.toBeVisible()" below would be vacuously true).
+    await expect(dropdown.locator('.dropdown-item', { hasText: 'Logout' })).toBeVisible();
     await expect(dropdown.locator('text=My Dashboard')).not.toBeVisible();
     await expect(dropdown.locator('text=My Profile')).not.toBeVisible();
     await expect(dropdown.locator('text=Guest Passes')).not.toBeVisible();
+    // v1.2.11 guest-pass menu fix: these two were missing the !isGuest gate
+    // (owner bug report — a guest could open Display Settings, then hit 403s
+    // on every save), and the toggle must not present the owner's name.
+    await expect(dropdown.locator('.dropdown-item', { hasText: 'Display Settings' })).not.toBeVisible();
+    await expect(dropdown.locator('.dropdown-item', { hasText: 'My Public Page' })).not.toBeVisible();
+    await expect(recruiterPage.locator('#navbarUserDropdown')).toContainText('Guest');
 
     await recruiterPage.click('body');
 
@@ -97,6 +115,26 @@ test.describe('GuestPass System E2E', () => {
     await recruiterPage.goto(`/${slug}/projects`);
     const addProjectBtn = recruiterPage.locator('button:has-text("Add Project")');
     await expect(addProjectBtn).not.toBeVisible();
+
+    // 6b. Nuxt (public) navbar — the exact surface from the owner's bug
+    // report: a full page load of a portfolio page as a guest must gate the
+    // same owner-only items and label the session as a guest (v1.2.11).
+    // The Nuxt shell does not activate Bootstrap's dropdown JS, so a click
+    // cannot open the menu here — assert the RENDERED DOM instead: v-if must
+    // have removed every owner-only item, leaving only the Logout item.
+    // (The SPA guest step above pins runtime visibility where Bootstrap IS
+    // active; the unit specs pin both navbars' templates directly.)
+    await expect(recruiterPage.locator('#navbarUserDropdown')).toContainText('Guest');
+    const nuxtDropdown = recruiterPage.locator('.glass-dropdown');
+    // Positive control: exactly one item remains, and it is the guest's Logout
+    // — the "haveCount(0)" assertions below cannot pass vacuously.
+    await expect(nuxtDropdown.locator('.dropdown-item')).toHaveCount(1);
+    await expect(nuxtDropdown.locator('.dropdown-item')).toContainText('Logout');
+    await expect(nuxtDropdown.locator('.dropdown-item', { hasText: 'Display Settings' })).toHaveCount(0);
+    await expect(nuxtDropdown.locator('.dropdown-item', { hasText: 'My Public Page' })).toHaveCount(0);
+    await expect(nuxtDropdown.locator('.dropdown-item', { hasText: 'My Dashboard' })).toHaveCount(0);
+    await expect(nuxtDropdown.locator('.dropdown-item', { hasText: 'PDF Settings' })).toHaveCount(0);
+    await expect(recruiterPage.locator('#navbarUserDropdown')).toContainText('Guest');
 
     await recruiterContext.close();
   });

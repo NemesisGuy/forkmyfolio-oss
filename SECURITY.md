@@ -2,8 +2,9 @@
 
 ## Supported versions
 
-The project has not yet published a stable release. Security fixes will
-apply to the latest default branch.
+Stable releases are published on GitHub (see the repository tags and
+`backend/changelog.md`). Security fixes apply to the latest release line and
+the default branch.
 
 ## Reporting a vulnerability
 

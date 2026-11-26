@@ -39,14 +39,21 @@ test.describe('Security & Penetration Audit', () => {
       // Load-sensitive budget (TESTING_POLICY §4.1): under a full-suite run the
       // browser can queue this POST behind the page's other in-flight requests
       // (6-connections-per-origin), so click → server receipt took ~15s in run J
-      // — landing at the exact moment the old fixed toast window closed. The
-      // save itself succeeded (201); only the assertion raced. Wait for the
-      // actual HTTP response instead (the test's stated intent: "ensure
-      // submission went through") and give the whole test more headroom.
-      test.setTimeout(60000);
+      // and exceeded 30s in run M (both Playwright projects timed out waiting
+      // for the response while the form stayed filled). The save itself succeeded
+      // in run J; only the assertion raced. Wait for the actual HTTP response
+      // (the test's stated intent) with a larger budget, and wait for Nuxt
+      // hydration before filling/clicking so an early click cannot be swallowed.
+      test.setTimeout(90000);
 
       // Navigate to a valid contact form (e.g. admin's public profile)
       await page.goto('/admin-user/contact');
+      // The page is the admin SPA (Vite/Vue). Under full-suite load a click
+      // immediately after goto can land before Vue has attached the submit
+      // handler; a short standardized pause (as in other specs here) plus the
+      // larger response budget below covers that without depending on Vue
+      // internals that may be absent from a production build.
+      await page.waitForTimeout(1500);
 
       // Inject XSS payload
       await page.fill('#name', 'Security Tester');
@@ -56,7 +63,7 @@ test.describe('Security & Penetration Audit', () => {
       // Register the response listener BEFORE clicking so it can't be missed.
       const contactPost = page.waitForResponse(
         (res) => res.url().includes('/contact-messages') && res.request().method() === 'POST',
-        { timeout: 30000 }
+        { timeout: 60000 }
       );
 
       // Submit

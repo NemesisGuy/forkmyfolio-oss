@@ -7,10 +7,13 @@ project overview, deployment, and configuration.
 ## Stack
 
 - Java 21, Spring Boot 3.5 (Spring Security with JWT, Spring Data JPA)
-- MySQL 8 (production), Redis 7 (caching, rate-limit buckets)
-- Flyway migrations (`src/main/resources/db/migration`)
-- OpenPDF 3.0.5 + ZXing 3.5.3 for PDF portfolio export (9 templates)
-- springdoc-openapi (Swagger UI at `/swagger-ui.html`)
+- MySQL 8 (production), Redis 7 (public-portfolio cache only; Bucket4j
+  rate-limit buckets are in-memory)
+- Flyway migrations (`src/main/resources/db/migration`, `V1`–`V13` + `V4_1`)
+- OpenPDF 3.0.5 + ZXing 3.5.3 for PDF portfolio export (8 selectable
+  templates; a 9th legacy class, `metro-dark`, is aliased to `metro-light`)
+- springdoc-openapi (Swagger UI at `/swagger-ui.html` — served by the backend,
+  **not** routed by the bundled nginx proxy)
 
 ## Layout
 
@@ -54,7 +57,7 @@ Manual ordering (`displayOrder` pinned slots) and position `0` = automatic
 chronological placement are governed by ONE contract:
 `com.forkmyfolio.util.ExperienceOrdering`, applied at every backend read
 (admin + guest experience APIs, full public portfolio payload, Markdown
-export, all five PDF templates) and mirrored on the client in
+export, all eight PDF templates) and mirrored on the client in
 `frontend-admin/src/utils/experienceOrdering.ts` and
 `frontend-public/app/utils/experienceOrdering.ts`.
 

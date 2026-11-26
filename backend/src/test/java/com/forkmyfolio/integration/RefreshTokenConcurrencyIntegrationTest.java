@@ -96,4 +96,59 @@ public class RefreshTokenConcurrencyIntegrationTest extends AbstractMySqlIntegra
                 .as("exactly one active refresh token per user once concurrent logins settle")
                 .isEqualTo(1);
     }
+
+    /**
+     * v1.2.11: parallel REGISTRATIONS (distinct, token-less users) must all
+     * get a token — none may die as an InnoDB deadlock victim.
+     *
+     * <p>This is the {@code /auth/register} 500 seen in the v1.2.11 guest-pass
+     * e2e sweep (4 parallel registrations across the two Playwright projects,
+     * one 500): {@code deleteByUser} on a FRESH user range-scans the
+     * {@code user_id} index up to the supremum and holds that gap X-lock until
+     * commit, while the parallel transaction's {@code INSERT INTO
+     * refresh_tokens} needs the very same gap (insert-intention) — InnoDB
+     * rolls one victim back with error 1213. The InnoDB status dump captured
+     * both transactions waiting at {@code hex73757072656d756d} ("supremum").
+     * Fixed at source (token-less users skip the DELETE — no gap lock is ever
+     * taken) with a bounded transaction-fresh retry as the safety net; this
+     * test pins the contract either way: no parallel registration may lose.
+     *
+     * <p>Deliberately NOT {@code @Transactional}, and each call runs in its own
+     * committed transaction — exactly like production registrations.
+     */
+    @Test
+    void concurrentCreateRefreshToken_forDistinctFreshUsers_allSucceed() throws Exception {
+        int threads = 12;
+        List<User> users = new ArrayList<>();
+        for (int i = 0; i < threads; i++) {
+            String suffix = runSuffix() + "-" + i;
+            users.add(seedUser("rt-deadlock-" + suffix + "@example.com",
+                    "rt-dl-" + suffix, false, Role.USER));
+        }
+
+        ExecutorService pool = Executors.newFixedThreadPool(threads);
+        CountDownLatch start = new CountDownLatch(1);
+        List<Future<RefreshToken>> futures = new ArrayList<>();
+        for (User user : users) {
+            futures.add(pool.submit(() -> {
+                start.await();
+                return refreshTokenService.createRefreshToken(user);
+            }));
+        }
+        start.countDown();
+
+        try {
+            for (Future<RefreshToken> future : futures) {
+                // Pre-fix this rethrew the deadlock victim's exception
+                // (ExecutionException wrapping the 1213 error) for the loser(s).
+                RefreshToken token = future.get(30, TimeUnit.SECONDS);
+                assertThat(token)
+                        .as("every parallel registration must produce a token — no deadlock victim")
+                        .isNotNull();
+                assertThat(token.getToken()).isNotBlank();
+            }
+        } finally {
+            pool.shutdownNow();
+        }
+    }
 }

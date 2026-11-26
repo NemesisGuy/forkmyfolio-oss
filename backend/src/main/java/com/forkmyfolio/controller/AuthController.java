@@ -190,6 +190,10 @@ public class AuthController {
         return refreshTokenService.findByToken(requestRefreshToken)
                 .map(refreshTokenService::verifyExpiration)
                 .map(verifiedRefreshToken -> {
+                    // v1.2.11: inactivity is enforced inside
+                    // RefreshTokenServiceImpl.verifyExpiration (the service
+                    // boundary) — never call entity methods from a controller
+                    // (ArchitectureTest NAG-01).
                     User user = verifiedRefreshToken.getUser();
                     UserPrincipal userPrincipal = UserPrincipal.create(user);
 

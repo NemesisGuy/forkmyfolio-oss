@@ -5,6 +5,7 @@ import com.forkmyfolio.model.User;
 import com.forkmyfolio.model.enums.AuthProvider;
 import com.forkmyfolio.model.enums.Role;
 import com.forkmyfolio.repository.UserRepository;
+import com.forkmyfolio.service.RefreshTokenService;
 import com.forkmyfolio.service.SlugService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -17,6 +18,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import java.util.HashSet;
 import java.util.Optional;
 import java.util.Set;
+import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
@@ -34,6 +36,9 @@ class UserServiceImplTest {
 
     @Mock
     private SlugService slugService;
+
+    @Mock
+    private RefreshTokenService refreshTokenService;
 
     @InjectMocks
     private UserServiceImpl userService;
@@ -132,5 +137,48 @@ class UserServiceImplTest {
 
         // Assert
         assertFalse(foundUser.isPresent());
+    }
+
+    // v1.2.11 SECURITY pins: deactivation must kill live refresh sessions,
+    // via BOTH the dedicated endpoint and the admin PUT (a known bypass).
+    @Test
+    void deactivateUser_revokesAllRefreshTokens() {
+        UUID uuid = UUID.randomUUID();
+        testUser.setUuid(uuid);
+        when(userRepository.findByUuid(uuid)).thenReturn(Optional.of(testUser));
+
+        userService.deactivateUser(uuid);
+
+        assertFalse(testUser.isActive());
+        verify(userRepository).save(testUser);
+        verify(refreshTokenService).deleteByUserId(1L);
+    }
+
+    @Test
+    void updateUserByAdmin_whenDeactivating_revokesAllRefreshTokens() {
+        UUID uuid = UUID.randomUUID();
+        testUser.setUuid(uuid);
+        when(userRepository.findByUuid(uuid)).thenReturn(Optional.of(testUser));
+        when(slugService.isSlugAvailable("test-user", uuid)).thenReturn(true);
+        when(userRepository.save(any(User.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        User updated = userService.updateUserByAdmin(uuid, "Test", "User", "test-user",
+                Set.of(Role.USER), false);
+
+        assertFalse(updated.isActive());
+        verify(refreshTokenService).deleteByUserId(1L);
+    }
+
+    @Test
+    void updateUserByAdmin_whenActivating_keepsRefreshTokens() {
+        UUID uuid = UUID.randomUUID();
+        testUser.setUuid(uuid);
+        when(userRepository.findByUuid(uuid)).thenReturn(Optional.of(testUser));
+        when(slugService.isSlugAvailable("test-user", uuid)).thenReturn(true);
+        when(userRepository.save(any(User.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        userService.updateUserByAdmin(uuid, "Test", "User", "test-user", Set.of(Role.USER), true);
+
+        verify(refreshTokenService, never()).deleteByUserId(anyLong());
     }
 }

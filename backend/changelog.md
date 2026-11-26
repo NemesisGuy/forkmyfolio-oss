@@ -2,6 +2,57 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.2.11] - 2026-11-26
+
+### 🐛 Bug Fixes
+
+- **Guest menu leak.** Guest sessions (a guest JWT carries the owner's id with
+  `ROLE_GUEST`) could open **Display Settings** and see **My Public Page** in
+  both the admin SPA and the public Nuxt navbar; reads worked but saves failed
+  with HTTP 403. Both items and the surplus divider are now gated with
+  `!isGuest`, and the navbar shows a **Guest** badge instead of the owner's
+  name. Guests keep exactly one divider and Logout.
+- **Parallel registrations no longer 500.** Two fresh registrations could
+  deadlock in `createRefreshToken`: `deleteByUser` on a token-less user locks
+  the `user_id` index supremum until commit, colliding with the parallel
+  INSERT (MySQL error 1213). A non-locking `existsByUser` probe now skips the
+  DELETE when there is nothing to invalidate, and any residual transient lock
+  failure is retried (3 attempts, each in a fresh transaction).
+
+### 🔒 Security
+
+- The OAuth2 authorization-request cookie is now **HMAC-signed JSON** keyed
+  with the JWT secret. The old Java-native deserialization of an unsigned
+  cookie was a gadget-chain RCE surface if the backend was exposed directly.
+- **Deactivating an account ends every session**: refresh tokens are revoked
+  (dedicated endpoint and admin PUT), existing JWTs and guest JWTs are
+  rejected with 401, refresh requests fail, and guest passes whose owner is
+  inactive are denied. `DisabledException` is mapped to 401 with a generic
+  message (no account enumeration).
+- **Login, registration and guest-login are rate-limited** per client IP
+  (default 120/5 min, env-tunable). `X-Forwarded-For` is only trusted on the
+  nginx-appended hop, `CF-Connecting-IP` is ignored, and forwarded-header
+  rewriting is off by default. `/refresh-token` is exempt (every SPA page load
+  probes it). Behind Docker NAT the bucket is per-host by design.
+
+### 📝 Documentation
+
+- Corrected material drift before release: admin password is **set-once** (not
+  force-synced), public frontend is **Nuxt 4**, social login is **backend-only**
+  (no UI/proxy route), admin reset does not force a password change, Swagger is
+  not publicly proxied, two frontends plus a proxy (not three), Flyway
+  `V1`–`V13` + `V4_1`, cover-letter public visibility applies to the merged PDF
+  only, guest read scope, and released-version wording. `README.md`,
+  `.env.example`, `docs/FEATURES.md`, `docs/DIAGRAMS.md`, `backend/README.md`,
+  `SECURITY.md`, `CONTRIBUTING.md` and `docs/LICENSING_ASSESSMENT.md` updated.
+
+### ✅ Testing
+
+- Gates re-run on DEV before tagging: backend battery **450/450**, admin vitest
+  **179/179**, public vitest **72/72**, Playwright **103/103**, ESLint clean on
+  touched files, inner-diff secret scan CLEAN. Two load-sensitive e2e budgets
+  were raised with comments + TESTING_POLICY §4.1 records (never dropped).
+
 ## [1.2.10] - 2026-11-24
 
 ### 🐛 Bug Fixes

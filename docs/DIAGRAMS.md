@@ -21,7 +21,7 @@ flowchart TB
     end
 
     subgraph Frontends["Frontends"]
-        N["Nuxt 3 SSR public site<br/>frontend-public"]
+        N["Nuxt 4 SSR public site<br/>frontend-public"]
         S["Vue 3 admin SPA<br/>frontend-admin"]
     end
 
@@ -34,7 +34,7 @@ flowchart TB
     end
 
     subgraph Data["Data &amp; storage"]
-        DB[("MySQL 8<br/>Flyway V1 to V13")]
+        DB[("MySQL 8<br/>Flyway V1 to V13 + V4_1")]
         RD[("Redis 7<br/>publicPortfolios cache")]
         BKP["Versioned JSON backups<br/>user and system"]
     end
@@ -183,11 +183,11 @@ sequenceDiagram
     end
 
     rect rgb(255, 248, 240)
-    Note over U,P: Social login
-    U->>F: Choose Sign in with Google or GitHub
-    F->>P: Redirect to /oauth2/authorize/google
+    Note over U,P: Social login (backend-only — no frontend button or /oauth2/ proxy route ships)
+    U->>F: [planned] Choose Sign in with Google or GitHub
+    F->>P: [planned] Redirect to /oauth2/authorize/google
     P-->>API: Callback /oauth2/callback/google
-    API->>DB: Find or create user by provider id
+    API->>DB: Find or create user by email (provider fields recorded)
     API-->>F: Redirect with JWT plus refresh cookie
     end
 
@@ -234,7 +234,8 @@ flowchart TD
 
 ## 5. Entity-relationship diagram
 
-All 24 tables. Internal `BIGINT` primary keys are paired with external
+24 diagram blocks: 21 JPA `@Entity` classes plus join tables / value
+collections. Internal `BIGINT` primary keys are paired with external
 `UUID` identifiers on user-facing entities (the "internal Long ID / external
 UUID ID" standard). Join tables are shown as entities.
 

@@ -82,6 +82,14 @@ public class GuestPassServiceImpl implements GuestPassService {
             throw new AccessDeniedException("Guest pass has expired");
         }
 
+        // v1.2.11 SECURITY: a guest pass belongs to an owner — if the owner's
+        // account is deactivated, guest access must fail too (the guest JWT
+        // carries the owner's id).
+        if (guestPass.getOwner() != null && !guestPass.getOwner().isActive()) {
+            log.warn("Guest pass {} owner is deactivated", guestPass.getUuid());
+            throw new AccessDeniedException("Portfolio owner is inactive");
+        }
+
         // Initialize the owner while still in the transaction to prevent
         // LazyInitializationException in the controller
         org.hibernate.Hibernate.initialize(guestPass.getOwner());

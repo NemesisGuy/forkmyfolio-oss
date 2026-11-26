@@ -318,7 +318,11 @@ onUnmounted(() => {
                        :src="authUser.profileImageUrl" alt="Avatar"
                        class="navbar-avatar ms-2 me-2">
                   <UserCircle v-else class="navbar-avatar-placeholder ms-2 me-2" />
-                  {{ authUser?.firstName || 'User' }}
+                  <!-- Guest-pass fix (v1.2.11): a guest session carries the
+                       OWNER's identity, so the owner's first name here read as
+                       "logged in as the user". Show an explicit Guest badge. -->
+                  <span v-if="isGuest" class="badge bg-secondary ms-2 me-2">Guest</span>
+                  <span v-else>{{ authUser?.firstName || 'User' }}</span>
                 </a>
                 <ul aria-labelledby="navbarUserDropdown"
                     class="dropdown-menu dropdown-menu-end glass-dropdown">
@@ -337,15 +341,18 @@ onUnmounted(() => {
                       <Ticket class="me-2" />Guest Passes
                     </a>
                   </li>
-                  <li v-if="authUser?.slug">
+                  <!-- Guest-pass fix (v1.2.11): owner-only items were missing
+                       the !isGuest gate every sibling item carries — a guest
+                       could open Display Settings and hit 403s on save. -->
+                  <li v-if="authUser?.slug && !isGuest">
                     <a :href="`/${authUser?.slug}`" class="dropdown-item">
                       <Home class="me-2" />My Public Page
                     </a>
                   </li>
-                  <li>
+                  <li v-if="!isGuest">
                     <hr class="dropdown-divider">
                   </li>
-                  <li>
+                  <li v-if="!isGuest">
                     <a :href="`/${authUser?.slug}/manage/settings/display`" class="dropdown-item">
                       <SlidersHorizontal class="me-2" />Display Settings
                     </a>

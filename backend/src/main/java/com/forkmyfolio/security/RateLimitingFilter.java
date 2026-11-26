@@ -8,6 +8,7 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -59,6 +60,20 @@ public class RateLimitingFilter extends OncePerRequestFilter {
     private final Bandwidth guestAnalyticsLimit = Bandwidth.classic(30, Refill.greedy(30, Duration.ofMinutes(1)));
     private final Bandwidth authAnalyticsLimit = Bandwidth.classic(60, Refill.greedy(60, Duration.ofMinutes(1)));
 
+    // v1.2.11 SECURITY: /auth/** was previously unthrottled (brute-force and
+    // registration-abuse surface). Defaults allow ~24 auth calls/minute per
+    // client IP with 4x headroom over a full e2e suite run; tunable by env,
+    // no secrets involved. Field initializers keep `new RateLimitingFilter()`
+    // working in unit tests.
+    @Value("${app.rate-limit.auth-capacity:120}")
+    private int authCapacity = 120;
+
+    @Value("${app.rate-limit.auth-refill:120}")
+    private int authRefill = 120;
+
+    @Value("${app.rate-limit.auth-refill-minutes:5}")
+    private int authRefillMinutes = 5;
+
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
             throws ServletException, IOException {
@@ -77,14 +92,25 @@ public class RateLimitingFilter extends OncePerRequestFilter {
         boolean isAnalytics = path.startsWith("/api/v1/me/analytics")
                 || path.startsWith("/api/v1/admin/analytics")
                 || path.startsWith("/api/v1/public/analytics");
+        // v1.2.11 SECURITY: these are the unauthenticated credential/account
+        // endpoints that used to bypass the filter entirely.
+        // /refresh-token is deliberately NOT here: every SPA page load probes
+        // it, and it only consumes a server-issued random UUID (no brute-force
+        // value). Including it would exhaust one shared bucket mid-e2e.
+        boolean isAuthRoute = "POST".equalsIgnoreCase(request.getMethod()) && (
+                path.equals("/api/v1/auth/login")
+                        || path.equals("/api/v1/auth/register")
+                        || path.equals("/api/v1/auth/guest-login"));
 
-        if (!isPublicPortfolio && !isAnalytics && !path.startsWith("/api/v1/me/portfolio/download")) {
+        if (!isAuthRoute && !isPublicPortfolio && !isAnalytics
+                && !path.startsWith("/api/v1/me/portfolio/download")) {
             filterChain.doFilter(request, response);
             return;
         }
 
-        String key = resolveKey(request, isDownload, path);
-        Bucket bucket = buckets.computeIfAbsent(key, k -> createNewBucket(isDownload, isAnalytics));
+        String key = resolveKey(request, isDownload, path, isAuthRoute);
+        Bucket bucket = buckets.computeIfAbsent(key,
+                k -> createNewBucket(isDownload, isAnalytics, isAuthRoute));
 
         if (bucket.tryConsume(1)) {
             filterChain.doFilter(request, response);
@@ -97,13 +123,16 @@ public class RateLimitingFilter extends OncePerRequestFilter {
         }
     }
 
-    private String resolveKey(HttpServletRequest request, boolean isDownload, String path) {
+    private String resolveKey(HttpServletRequest request, boolean isDownload, String path, boolean isAuthRoute) {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-        String prefix = isDownload ? "DL:" : "GEN:";
+        String prefix = isAuthRoute ? "AUTH-IP:" : (isDownload ? "DL:" : "GEN:");
 
-        // Strategy:
-        // 1. Authenticated users are keyed by their email/username.
-        // 2. Guests are keyed by their resolved Client IP.
+        // Auth endpoints are ALWAYS keyed by client IP, never by a principal:
+        // a stale SecurityContext from another request must not let a caller
+        // switch buckets mid-burst.
+        if (isAuthRoute) {
+            return prefix + resolveClientIp(request);
+        }
 
         String identifier;
         if (auth != null && auth.isAuthenticated() && !"anonymousUser".equals(auth.getPrincipal())) {
@@ -127,29 +156,34 @@ public class RateLimitingFilter extends OncePerRequestFilter {
      * Resolves the real client IP.
      *
      * <p>
-     * Proxy headers ({@code CF-Connecting-IP}, {@code X-Forwarded-For}) are only
-     * honoured when the direct peer is a trusted (loopback or private) address.
-     * This prevents clients from spoofing an arbitrary IP to create unlimited
-     * rate-limit buckets.
+     * Proxy headers are honoured ONLY when the direct peer is trusted
+     * (loopback/private — i.e. the bundled nginx/docker network). From a
+     * multi-value {@code X-Forwarded-For} we take the <b>last</b> entry: nginx
+     * appends the real peer itself, while anything to the left is
+     * client-supplied and therefore forgeable. {@code CF-Connecting-IP} is
+     * ignored entirely (a client can set that header directly). From a public
+     * peer we use {@code getRemoteAddr()} only — no headers at all.
+     *
+     * <p>Trade-off: behind Docker NAT every visitor shares the nginx peer IP,
+     * so the bucket is per-host rather than per-visitor. That is conservative
+     * (no bypass) and the auth budget is sized accordingly.
      */
     private String resolveClientIp(HttpServletRequest request) {
         String remoteAddr = request.getRemoteAddr();
         if (isTrustedProxy(remoteAddr)) {
-            // 1. Check Cloudflare-specific header
-            String cfIp = request.getHeader("CF-Connecting-IP");
-            if (cfIp != null && !cfIp.isBlank()) {
-                return cfIp.trim();
-            }
-
-            // 2. Check standard proxy header
+            // nginx appends the real peer as the LAST XFF entry. Anything to
+            // the left came from the client and must be ignored (v1.2.11).
             String xff = request.getHeader("X-Forwarded-For");
             if (xff != null && !xff.isBlank()) {
-                // X-Forwarded-For can be a comma-separated list; the first one is the client.
-                return xff.split(",")[0].trim();
+                String[] parts = xff.split(",");
+                String last = parts[parts.length - 1].trim();
+                if (!last.isEmpty()) {
+                    return last;
+                }
             }
         }
 
-        // 3. Fallback to direct remote address (local dev or direct access)
+        // Direct/public peer (or no usable proxy header): never trust headers.
         return remoteAddr;
     }
 
@@ -176,13 +210,17 @@ public class RateLimitingFilter extends OncePerRequestFilter {
         return null;
     }
 
-    private Bucket createNewBucket(boolean isDownload, boolean isAnalytics) {
+    private Bucket createNewBucket(boolean isDownload, boolean isAnalytics, boolean isAuthRoute) {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
         boolean isAuthenticated = (auth != null && auth.isAuthenticated()
                 && !"anonymousUser".equals(auth.getPrincipal()));
 
         Bandwidth limit;
-        if (isAnalytics) {
+        if (isAuthRoute) {
+            // Credential/account endpoints: independent per-IP budget.
+            limit = Bandwidth.classic(authCapacity,
+                    Refill.greedy(authRefill, Duration.ofMinutes(authRefillMinutes)));
+        } else if (isAnalytics) {
             // Analytics proxy endpoints: modest per-identity budget (server-side
             // caching makes higher rates pointless).
             limit = isAuthenticated ? authAnalyticsLimit : guestAnalyticsLimit;

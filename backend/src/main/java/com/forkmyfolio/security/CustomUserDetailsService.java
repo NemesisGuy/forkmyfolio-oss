@@ -45,6 +45,11 @@ public class CustomUserDetailsService implements UserDetailsService {
     public UserDetails loadUserByUsername(String email) throws UsernameNotFoundException {
         User user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new UsernameNotFoundException("User not found with email: " + email));
+        // v1.2.11: do NOT throw DisabledException from here —
+        // DaoAuthenticationProvider wraps UserDetailsService exceptions into
+        // InternalAuthenticationServiceException (HTTP 500). Spring's own
+        // preAuthenticationChecks rejects !isEnabled() with a plain
+        // DisabledException, which GlobalExceptionHandler maps to 401.
         // Standardize on UserPrincipal for all authentication paths
         return UserPrincipal.create(user);
     }

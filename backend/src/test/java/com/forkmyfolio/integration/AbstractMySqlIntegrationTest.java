@@ -68,7 +68,15 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         // an explicit signing key here — valid Base64 decoding to 64 raw
         // bytes (HS512 requirement), exactly like production values.
         "app.jwt.secret=dGVzdC1vbmx5LXNpZ25pbmcta2V5LTAxMjM0NTY3ODlhYmNkZWYwMTIzNDU2Nzg5YWJjZGVmMDEyMzQ1Njc4OQ==",
-        "app.admin.password=test-only-admin-password"
+        "app.admin.password=test-only-admin-password",
+        // v1.2.11: the auth-rate-limit bucket is shared by every MockMvc
+        // request in the JVM (all from 127.0.0.1). The battery performs far
+        // more than the production 120 logins/5min, so raise it for tests
+        // ONLY — production keeps the conservative default. Not a disabled
+        // assertion: the limiter's own unit tests pin the real 120 budget.
+        "app.rate-limit.auth-capacity=100000",
+        "app.rate-limit.auth-refill=100000",
+        "app.rate-limit.auth-refill-minutes=1"
 })
 @AutoConfigureMockMvc
 public abstract class AbstractMySqlIntegrationTest {

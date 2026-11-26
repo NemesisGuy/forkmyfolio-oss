@@ -17,6 +17,8 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.UserDetails;
 
+import java.io.PrintWriter;
+import java.io.StringWriter;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
@@ -109,5 +111,59 @@ class JwtAuthenticationFilterTest {
 
         assertNull(SecurityContextHolder.getContext().getAuthentication());
         verify(filterChain).doFilter(request, response);
+    }
+
+    // v1.2.11 SECURITY pins: deactivated accounts must not keep using a
+    // previously issued JWT (normal OR guest), even while the token itself
+    // is still cryptographically valid.
+    @Test
+    void doFilterInternal_inactiveUser_returns401AndDoesNotAuthenticate() throws Exception {
+        String token = "inactive-user-token";
+        Claims claims = new DefaultClaims(Map.of("sub", "1"));
+        User user = new User();
+        user.setId(1L);
+        user.setActive(false);
+        UserDetails inactive = UserPrincipal.create(user, Collections.emptyList());
+        StringWriter body = new StringWriter();
+
+        when(request.getHeader("Authorization")).thenReturn("Bearer " + token);
+        when(tokenProvider.validateToken(token)).thenReturn(true);
+        when(tokenProvider.getClaimsFromToken(token)).thenReturn(claims);
+        when(customUserDetailsService.loadUserById(1L)).thenReturn(inactive);
+        when(response.getWriter()).thenReturn(new PrintWriter(body));
+
+        jwtAuthenticationFilter.doFilterInternal(request, response, filterChain);
+
+        assertNull(SecurityContextHolder.getContext().getAuthentication());
+        verify(response).setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+        assertTrue(body.toString().contains("Account is inactive"));
+        verifyNoInteractions(filterChain);
+    }
+
+    @Test
+    void doFilterInternal_inactiveGuestOwner_returns401AndDoesNotAuthenticate() throws Exception {
+        String token = "inactive-owner-guest-token";
+        Map<String, Object> claimsMap = new HashMap<>();
+        claimsMap.put("sub", "1");
+        claimsMap.put("guestPass", "uuid-123");
+        Claims claims = new DefaultClaims(claimsMap);
+        User owner = new User();
+        owner.setId(1L);
+        owner.setActive(false);
+        UserDetails inactiveOwner = UserPrincipal.create(owner, Collections.emptyList());
+        StringWriter body = new StringWriter();
+
+        when(request.getHeader("Authorization")).thenReturn("Bearer " + token);
+        when(tokenProvider.validateToken(token)).thenReturn(true);
+        when(tokenProvider.getClaimsFromToken(token)).thenReturn(claims);
+        when(customUserDetailsService.loadUserById(1L)).thenReturn(inactiveOwner);
+        when(response.getWriter()).thenReturn(new PrintWriter(body));
+
+        jwtAuthenticationFilter.doFilterInternal(request, response, filterChain);
+
+        assertNull(SecurityContextHolder.getContext().getAuthentication());
+        verify(response).setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+        assertTrue(body.toString().contains("Account is inactive"));
+        verifyNoInteractions(filterChain);
     }
 }

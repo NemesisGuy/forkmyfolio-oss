@@ -1,5 +1,6 @@
 package com.forkmyfolio.security.oauth2;
 
+import com.forkmyfolio.config.AppProperties;
 import com.forkmyfolio.util.CookieUtils;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -20,6 +21,11 @@ public class HttpCookieOAuth2AuthorizationRequestRepository implements Authoriza
     public static final String OAUTH2_AUTHORIZATION_REQUEST_COOKIE_NAME = "oauth2_auth_request";
     public static final String REDIRECT_URI_PARAM_COOKIE_NAME = "redirect_uri";
     private static final int COOKIE_EXPIRE_SECONDS = 180; // 3 minutes
+    /** SameSite=Lax is required so the IdP's cross-site GET callback sends the cookie. */
+    private static final String OAUTH_COOKIE_SAME_SITE = "Lax";
+
+    private final OAuth2AuthorizationRequestCodec codec;
+    private final AppProperties appProperties;
 
     /**
      * Loads the authorization request from the cookie.
@@ -33,7 +39,7 @@ public class HttpCookieOAuth2AuthorizationRequestRepository implements Authoriza
     @Deprecated
     public OAuth2AuthorizationRequest loadAuthorizationRequest(HttpServletRequest request) {
         return CookieUtils.getCookie(request, OAUTH2_AUTHORIZATION_REQUEST_COOKIE_NAME)
-                .map(cookie -> CookieUtils.deserialize(cookie, OAuth2AuthorizationRequest.class))
+                .map(cookie -> codec.decode(cookie.getValue()))
                 .orElse(null);
     }
 
@@ -51,10 +57,16 @@ public class HttpCookieOAuth2AuthorizationRequestRepository implements Authoriza
             return;
         }
 
-        CookieUtils.addCookie(response, OAUTH2_AUTHORIZATION_REQUEST_COOKIE_NAME, CookieUtils.serialize(authorizationRequest), COOKIE_EXPIRE_SECONDS);
+        CookieUtils.addCookie(response,
+                OAUTH2_AUTHORIZATION_REQUEST_COOKIE_NAME,
+                codec.encode(authorizationRequest),
+                COOKIE_EXPIRE_SECONDS,
+                appProperties.getCookie().isSecure(),
+                OAUTH_COOKIE_SAME_SITE);
         String redirectUriAfterLogin = request.getParameter(REDIRECT_URI_PARAM_COOKIE_NAME);
         if (StringUtils.hasText(redirectUriAfterLogin)) {
-            CookieUtils.addCookie(response, REDIRECT_URI_PARAM_COOKIE_NAME, redirectUriAfterLogin, COOKIE_EXPIRE_SECONDS);
+            CookieUtils.addCookie(response, REDIRECT_URI_PARAM_COOKIE_NAME, redirectUriAfterLogin,
+                    COOKIE_EXPIRE_SECONDS, appProperties.getCookie().isSecure(), OAUTH_COOKIE_SAME_SITE);
         }
     }
 

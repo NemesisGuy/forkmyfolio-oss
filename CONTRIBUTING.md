@@ -1,8 +1,7 @@
 # Contributing to ForkMyFolio
 
-Thank you for considering contributing! This project is preparing for its
-first open-source release; these guidelines will be refined as the project
-matures.
+Thank you for considering contributing! This is a published, self-hosted
+open-source project; these guidelines will continue to mature with it.
 
 ## Code of conduct
 

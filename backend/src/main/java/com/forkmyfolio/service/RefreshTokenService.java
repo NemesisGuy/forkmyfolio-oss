@@ -24,6 +24,11 @@ public interface RefreshTokenService {
      * Creates and persists a new refresh token for the given user.
      * This enforces a one-active-token-per-user policy by deleting any pre-existing token.
      *
+     * <p>Concurrency: safe to call from parallel registrations/logins — the
+     * implementation retries a transient InnoDB deadlock (error 1213, seen
+     * when two token-less users' inserts race at the {@code user_id} index
+     * supremum) in a fresh transaction, up to 3 attempts total, then rethrows.
+     *
      * @param user The user for whom the refresh token is to be created.
      * @return The created {@link RefreshToken}.
      */

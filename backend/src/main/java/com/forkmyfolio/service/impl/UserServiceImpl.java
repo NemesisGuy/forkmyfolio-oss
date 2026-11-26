@@ -11,6 +11,7 @@ import com.forkmyfolio.model.enums.AuthProvider;
 import com.forkmyfolio.repository.ContactMessageRepository;
 import com.forkmyfolio.repository.PortfolioProfileRepository;
 import com.forkmyfolio.repository.UserRepository;
+import com.forkmyfolio.service.RefreshTokenService;
 import com.forkmyfolio.service.SlugService;
 import com.forkmyfolio.service.UserService;
 import lombok.RequiredArgsConstructor;
@@ -44,6 +45,8 @@ public class UserServiceImpl implements UserService {
     private final SlugService slugService;
     private final ContactMessageRepository contactMessageRepository;
     private final PortfolioProfileRepository portfolioProfileRepository;
+    // v1.2.11 SECURITY: deactivation must revoke live refresh sessions.
+    private final RefreshTokenService refreshTokenService;
 
     @Override
     @Transactional
@@ -168,6 +171,12 @@ public class UserServiceImpl implements UserService {
         user.setSlug(slug);
         user.setRoles(roles);
         user.setActive(active);
+        // v1.2.11 SECURITY: an admin PUT that deactivates an account is just
+        // as dangerous as the dedicated deactivation endpoint — revoke every
+        // refresh token so the user cannot simply refresh their way back in.
+        if (Boolean.FALSE.equals(active)) {
+            refreshTokenService.deleteByUserId(user.getId());
+        }
         log.info("Admin updated user with UUID: {}", uuid);
         return userRepository.save(user);
     }
@@ -179,6 +188,9 @@ public class UserServiceImpl implements UserService {
         user.setActive(false);
         log.warn("Deactivating user with UUID: {}", uuid);
         userRepository.save(user);
+        // v1.2.11 SECURITY: revoke all refresh tokens — otherwise the
+        // deactivated user keeps a working session until expiry.
+        refreshTokenService.deleteByUserId(user.getId());
     }
 
     @Override
