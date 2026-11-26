@@ -41,7 +41,7 @@ describe('LoginPage social login buttons', () => {
     const wrapper = mountPage();
     const button = wrapper.find('a[href^="/oauth2/authorize/keycloak?"]');
     expect(button.exists()).toBe(true);
-    expect(button.text()).toBe('Sign in with Keycloak');
+    expect(button.text()).toBe('Sign in with SSO');
     expect(button.attributes('href')).toContain('redirect_uri=');
     expect(decodeURIComponent(button.attributes('href') || '')).toContain('/oauth2/redirect');
     wrapper.unmount();

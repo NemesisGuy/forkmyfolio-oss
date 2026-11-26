@@ -25,8 +25,8 @@ whole installation.
   callback, and issues a JWT + HttpOnly refresh cookie. The bundled nginx proxy
   routes `/oauth2/**` to the backend (the SPA's `/oauth2/redirect` callback view
   is served by the frontend in same-host mode). Enable the SPA button with
-  `VITE_SOCIAL_LOGIN_ENABLED=true` and `VITE_SOCIAL_PROVIDERS=keycloak`; the
-  optional Nuxt sign-in link uses `NUXT_PUBLIC_SOCIAL_LOGIN_ENABLED=true`. The
+  `VITE_SOCIAL_LOGIN_ENABLED=true` and `VITE_SOCIAL_PROVIDERS=keycloak`; it
+  renders a vendor-neutral "Sign in with SSO" alternative only on /login and /register (never in the public-site navbar). The
   provider's client id/secret and issuer URI are configured only in `.env`
   — never in a frontend build. The SPA currently surfaces only the `keycloak`
   provider id; Google and GitHub registrations remain backend-only UI-wise.

@@ -2,6 +2,22 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.3.1] - 2026-11-26
+
+### 🐛 Bug Fixes / UI
+
+- **SSO button is vendor-neutral and only on auth forms.** The label is now
+  **"Sign in with SSO"** (no provider brand disclosed), rendered as an
+  alternative on both `/login` and `/register` when enabled. Removed the
+  sign-in link from the Nuxt public-site navbar entirely and dropped the
+  unused `NUXT_PUBLIC_SOCIAL_LOGIN_ENABLED` flag/config.
+- No backend or proxy changes in this patch; v1.3.0 OIDC plumbing is unchanged.
+
+### ✅ Testing
+
+- Backend **465/465** (unchanged), admin vitest **200/200**, public **72/72**,
+  Playwright **107/107**, ESLint clean, frontend builds succeeded.
+
 ## [1.3.0] - 2026-11-26
 
 ### ✨ Features

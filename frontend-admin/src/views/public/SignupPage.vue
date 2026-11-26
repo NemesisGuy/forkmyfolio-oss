@@ -74,6 +74,19 @@
               {{ isLoading ? 'Creating Account...' : 'Create Account' }}
             </button>
           </form>
+
+          <!-- Alternative sign-in: only rendered when the deployment opts in.
+               Vendor-neutral label; the href is our own authorize endpoint. -->
+          <template v-if="socialLoginEnabled && socialProviders.length > 0">
+            <div class="social-login-divider text-center my-3"><span>or</span></div>
+            <a v-for="provider in socialProviders"
+               :key="provider"
+               :href="socialAuthorizeUrl(provider)"
+               class="btn btn-outline-primary w-100 mb-2 interactive-lift">
+              {{ getSocialProviderLabel(provider) }}
+            </a>
+          </template>
+
           <p class="mt-4 text-center">
             Already have an account?
             <router-link to="/login">Login</router-link>
@@ -117,6 +130,19 @@ import SuccessModal from '@/components/common/modals/SuccessModal.vue';
 import ErrorModal from '@/components/common/modals/ErrorModal.vue';
 import TermsAgreementModal from '@/components/auth/TermsAgreementModal.vue';
 import type { User } from '@/types';
+import {
+  getSocialLoginConfig,
+  getSocialProviderLabel,
+  type SocialProviderId,
+} from '@/services/runtimeConfig';
+
+// Same deny-by-default runtime flags as the login page; registration offers
+// the same SSO alternative once enabled in the deployment.
+const socialConfig = getSocialLoginConfig();
+const socialLoginEnabled = socialConfig.enabled;
+const socialProviders = socialConfig.providers;
+const socialAuthorizeUrl = (provider: SocialProviderId): string =>
+  `/oauth2/authorize/${provider}?redirect_uri=${encodeURIComponent(`${window.location.origin}/oauth2/redirect`)}`;
 
 /**
  * @file src/views/SignupPage.vue
@@ -319,6 +345,23 @@ const executeRegistration = async () => {
 </script>
 
 <style scoped>
+.social-login-divider {
+  position: relative;
+  color: var(--bs-secondary-color, var(--bs-secondary));
+}
+.social-login-divider::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  border-top: 1px solid rgba(var(--bs-body-color-rgb), 0.15);
+}
+.social-login-divider span {
+  position: relative;
+  padding: 0 0.75rem;
+  background-color: rgba(var(--bs-body-bg-rgb), 1);
+}
 .signup-page {
   min-height: 100dvh;
   display: flex;

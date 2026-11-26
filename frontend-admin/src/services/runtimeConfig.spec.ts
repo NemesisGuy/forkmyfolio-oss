@@ -59,7 +59,7 @@ describe('runtimeConfig social-login parsing (non-secret flags only)', () => {
     expect(getSocialLoginConfig()).toEqual({ enabled: false, providers: [] });
   });
 
-  it('uses the prescribed button label for the keycloak provider', () => {
-    expect(getSocialProviderLabel('keycloak')).toBe('Sign in with Keycloak');
+  it('uses a vendor-neutral button label (does not disclose the IdP)', () => {
+    expect(getSocialProviderLabel('keycloak')).toBe('Sign in with SSO');
   });
 });

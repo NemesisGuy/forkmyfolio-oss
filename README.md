@@ -134,8 +134,7 @@ is missing.
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`, `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` | Backend OAuth2 registrations. Their API handlers exist, but the SPA does **not** render buttons for these ids — they remain backend-only UI-wise unless a frontend provider descriptor is added. Register the callback URL with the provider out-of-band; the built-in defaults point at localhost. |
 | `KEYCLOAK_CLIENT_ID`, `KEYCLOAK_CLIENT_SECRET`, `KEYCLOAK_ISSUER_URI` | Backend-only OIDC registration values for a Keycloak realm/client. Set these only when enabling the Keycloak provider; never in a frontend build or a repository file. |
 | `APP_OAUTH2_AUTHORIZEDREDIRECTURIS` | Comma-separated allowlist of callback redirect URIs used by the backend OAuth2/OIDC flow. Must include the deployed SPA origin's `/oauth2/redirect` when social login is enabled. |
-| `VITE_SOCIAL_LOGIN_ENABLED`, `VITE_SOCIAL_PROVIDERS` | Non-secret SPA runtime flags (`config.js`, injected at container start). `true` plus a comma-separated provider id (currently `keycloak`) renders "Sign in with Keycloak" on `/login`. Disabled by default; no issuer URL or secret is exposed in built assets. |
-| `NUXT_PUBLIC_SOCIAL_LOGIN_ENABLED` | Non-secret public-site flag; `true` shows an optional sign-in link in the Nuxt navbar that navigates to the SPA's `/login`. Disabled by default. |
+| `VITE_SOCIAL_LOGIN_ENABLED`, `VITE_SOCIAL_PROVIDERS` | Non-secret SPA runtime flags (`config.js`, injected at container start). `true` plus a comma-separated provider id (currently `keycloak`) renders a vendor-neutral **"Sign in with SSO"** alternative on **`/login` and `/register`**. Disabled by default; no issuer URL or secret is exposed in built assets. |
 
 The application database user is deliberately separate from the MySQL root
 account: the application never needs root privileges.
@@ -150,9 +149,8 @@ default**. To enable it:
    (and `APP_OAUTH2_AUTHORIZEDREDIRECTURIS` for the callback allowlist).
    Deploying Keycloak itself is out of scope — it is an external IdP.
 2. Set `VITE_SOCIAL_LOGIN_ENABLED=true` and `VITE_SOCIAL_PROVIDERS=keycloak`
-   to show the "Sign in with Keycloak" button on the SPA login page. Optionally
-   set `NUXT_PUBLIC_SOCIAL_LOGIN_ENABLED=true` for a sign-in link on the public
-   site.
+   to show the vendor-neutral "Sign in with SSO" alternative on the SPA's
+   `/login` and `/register` pages — never in the public-site navbar.
 3. Register the provider callback URL (`/oauth2/callback/keycloak` on the
    deployed host, plus the SPA's `/oauth2/redirect` as an authorized redirect
    URI) with your IdP. Real issuer URLs and credentials never belong in any

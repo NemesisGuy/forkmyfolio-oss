@@ -186,7 +186,7 @@ sequenceDiagram
 
     rect rgb(255, 248, 240)
     Note over U,P: Social login (Keycloak/OIDC; opt-in via env flags)
-    U->>F: Choose "Sign in with Keycloak" (button rendered only when enabled)
+    U->>F: Choose "Sign in with SSO" on the login/register form (rendered only when enabled)
     F->>API: Full-page GET /oauth2/authorize/keycloak + redirect_uri (SPA origin)
     API-->>P: Redirect to IdP authorization endpoint
     P-->>API: GET /oauth2/callback/keycloak (through proxy)

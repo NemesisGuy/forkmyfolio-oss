@@ -72,7 +72,8 @@ export function getSocialLoginConfig(): SocialLoginConfig {
   };
 }
 
-/** Human label for a known provider id. */
-export function getSocialProviderLabel(id: SocialProviderId): string {
-  return `Sign in with ${id.charAt(0).toUpperCase() + id.slice(1)}`;
+/** Vendor-neutral label — never disclose the IdP brand in the UI. */
+export function getSocialProviderLabel(_id: SocialProviderId): string {
+  void _id; // signature kept for callers; label is intentionally vendor-neutral
+  return 'Sign in with SSO';
 }
