@@ -1,6 +1,5 @@
 package com.forkmyfolio.integration;
 
-import com.forkmyfolio.exception.OAuth2AuthenticationProcessingException;
 import com.forkmyfolio.model.User;
 import com.forkmyfolio.model.enums.AuthProvider;
 import com.forkmyfolio.model.enums.Role;
@@ -15,10 +14,8 @@ import org.springframework.security.oauth2.core.oidc.user.OidcUser;
 
 import java.util.HashMap;
 import java.util.Map;
-import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -91,22 +88,29 @@ class KeycloakOidcIntegrationTest extends AbstractMySqlIntegrationTest {
     }
 
     @Test
-    void oidcLogin_rejectsEmailThatBelongsToLocalAccount() {
+    void oidcLogin_linksEmailOfExistingLocalAccount_andPasswordLoginStillWorks() throws Exception {
         String suffix = runSuffix();
-        String email = "oidc-conflict-" + suffix + "@example.test";
-        User local = seedUser(email, "oidc-conflict-" + suffix, false, Role.USER);
+        String email = "oidc-link-" + suffix + "@example.test";
+        User local = seedUser(email, "oidc-link-" + suffix, false, Role.ADMIN);
         assertThat(local.getProvider()).isEqualTo(AuthProvider.LOCAL);
+        String originalPasswordHash = local.getPassword();
 
         OidcUserRequest request = keycloakRequest();
         Map<String, Object> claims = claims(suffix, email);
-        claims.put("sub", "kc-sub-conflict-" + suffix);
+        claims.put("sub", "kc-sub-link-" + suffix);
 
-        assertThatThrownBy(() -> customOidcUserService.processOidcUser(request, oidcUser(claims)))
-                .isInstanceOf(OAuth2AuthenticationProcessingException.class)
-                .hasMessageContaining("LOCAL");
+        OidcUser result = customOidcUserService.processOidcUser(request, oidcUser(claims));
+        Long userId = ((UserPrincipal) result).getId();
+        assertThat(userId).isEqualTo(local.getId());
 
-        Optional<User> unexpected = userRepository.findByProviderAndProviderId(
-                AuthProvider.KEYCLOAK, "kc-sub-conflict-" + suffix);
-        assertThat(unexpected).isEmpty();
+        User linked = userRepository.findById(userId).orElseThrow();
+        assertThat(linked.getProvider()).isEqualTo(AuthProvider.KEYCLOAK);
+        assertThat(linked.getProviderId()).isEqualTo("kc-sub-link-" + suffix);
+        assertThat(linked.getPassword()).isEqualTo(originalPasswordHash); // password login preserved
+        assertThat(linked.getRoles()).contains(Role.ADMIN);               // roles preserved
+        assertThat(linked.getSlug()).isEqualTo(local.getSlug());          // identity preserved
+
+        // The SAME account still authenticates with the original password.
+        assertThat(realLogin(email, "Password123!")).isNotBlank();
     }
 }

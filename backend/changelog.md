@@ -2,6 +2,22 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.3.2] - 2026-11-26
+
+### 🔄 Authentication
+
+- **One account, either login method.** When an SSO email matches an existing
+  LOCAL account, the IdP identity is now **linked onto that same account**
+  instead of being rejected. Password hash, roles, slug and id are preserved,
+  so the user can log in with their password or with SSO at any time.
+  Applies to the `KEYCLOAK` provider; disabled accounts are still rejected.
+
+### ✅ Testing
+
+- Backend battery **465/465**, including a real-MySQL test proving the linked
+  account retains its ADMIN role and password hash and still authenticates with
+  the original password. Frontend/e2e unchanged from v1.3.1.
+
 ## [1.3.1] - 2026-11-26
 
 ### 🐛 Bug Fixes / UI

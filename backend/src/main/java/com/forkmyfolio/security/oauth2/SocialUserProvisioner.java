@@ -24,12 +24,14 @@ import java.util.Optional;
  * <ol>
  *   <li>look up by {@code (provider, provider_id)} — the IdP's subject is the
  *       authoritative identity;</li>
- *   <li>only then look up by email, and reject if that email belongs to a
- *       LOCAL account (or to a different provider id) instead of silently
- *       merging accounts.</li>
+ *   <li>only then look up by email. A match is LINKED to the current provider:
+ *       the IdP has proven ownership of that email, so the account keeps its
+ *       password hash, roles, slug and id and can be used with EITHER login
+ *       method (owner decision 2026-11-26).</li>
  * </ol>
- * New social accounts always get {@link Role#USER}; IdP-supplied roles are
- * deliberately ignored (no auto-admin provisioning).
+ * Disabled accounts are always rejected. New social accounts always get
+ * {@link Role#USER}; IdP-supplied roles are deliberately ignored (no
+ * auto-admin provisioning).
  */
 @Service
 @RequiredArgsConstructor
@@ -78,15 +80,11 @@ public class SocialUserProvisioner {
         if (byEmail.isPresent()) {
             User existing = byEmail.get();
             rejectIfDisabled(existing);
-            if (!provider.equals(existing.getProvider())) {
-                throw new OAuth2AuthenticationProcessingException("Looks like you're signed up with "
-                        + existing.getProvider() + " account. Please use your " + existing.getProvider()
-                        + " account to login.");
-            }
-            // Same provider, different subject: never merge on email alone.
-            throw new OAuth2AuthenticationProcessingException(
-                    "This email is already linked to a different " + provider + " identity. "
-                            + "Refusing to merge accounts.");
+            // Email-based linking: the IdP has verified this email, so attach
+            // the new identity to the SAME account. Password hash, roles,
+            // slug and id are deliberately untouched — the user can keep
+            // logging in with their password as well as with SSO.
+            return linkExistingUser(existing, provider, providerId, claims);
         }
 
         return registerNewUser(provider, providerId, email, claims);
@@ -130,6 +128,15 @@ public class SocialUserProvisioner {
         user.setActive(true);
         user.setSlug(slugService.generateUniqueSlug(firstName + " " + lastName));
         return userRepository.save(user);
+    }
+
+    /** Links an IdP identity onto an existing local account without touching its password/roles. */
+    private User linkExistingUser(User existing, AuthProvider provider, String providerId,
+            Map<String, Object> claims) {
+        existing.setProvider(provider);
+        existing.setProviderId(providerId);
+        existing.setEmailVerified(true);
+        return updateExistingUser(existing, claims);
     }
 
     private User updateExistingUser(User existingUser, Map<String, Object> claims) {

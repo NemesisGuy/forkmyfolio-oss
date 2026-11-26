@@ -164,33 +164,44 @@ class CustomOidcUserServiceTest {
     }
 
     @Test
-    void emailMatchingLocalAccount_isRejectedNeverMerged() {
+    void emailMatchingLocalAccount_isLinkedAndKeepsPasswordAndRoles() {
         OidcUser principal = oidcWith(claims());
         User local = persistedUser(9L);
         local.setProvider(AuthProvider.LOCAL);
+        local.setProviderId(null);
+        local.setPassword("existing-password-hash");
+        local.setRoles(new HashSet<>(Set.of(Role.ADMIN))); // must survive the link
         when(userRepository.findByProviderAndProviderId(AuthProvider.KEYCLOAK, "kc-sub-123"))
                 .thenReturn(Optional.empty());
         when(userRepository.findByEmail("ada@example.test")).thenReturn(Optional.of(local));
+        when(userRepository.save(local)).thenReturn(local);
 
-        assertThatThrownBy(() -> service.processOidcUser(userRequest, principal))
-                .isInstanceOf(OAuth2AuthenticationProcessingException.class)
-                .hasMessageContaining("LOCAL");
-        verify(userRepository, never()).save(any(User.class));
+        OidcUser result = service.processOidcUser(userRequest, principal);
+
+        // Same account id — SSO and password login now both work on it.
+        assertThat(((UserPrincipal) result).getId()).isEqualTo(9L);
+        assertThat(local.getProvider()).isEqualTo(AuthProvider.KEYCLOAK);
+        assertThat(local.getProviderId()).isEqualTo("kc-sub-123");
+        assertThat(local.getPassword()).isEqualTo("existing-password-hash");
+        assertThat(local.getRoles()).containsExactly(Role.ADMIN);
+        assertThat(local.getSlug()).isEqualTo("ada-lovelace");
+        verify(userRepository).save(local);
     }
 
     @Test
-    void emailMatchingSameProviderDifferentSubject_isRejected() {
+    void emailMatchingDifferentSubject_isRelinkedToCurrentIdentity() {
         OidcUser principal = oidcWith(claims());
         User otherKeycloakUser = persistedUser(10L);
         otherKeycloakUser.setProviderId("kc-sub-different");
         when(userRepository.findByProviderAndProviderId(AuthProvider.KEYCLOAK, "kc-sub-123"))
                 .thenReturn(Optional.empty());
         when(userRepository.findByEmail("ada@example.test")).thenReturn(Optional.of(otherKeycloakUser));
+        when(userRepository.save(otherKeycloakUser)).thenReturn(otherKeycloakUser);
 
-        assertThatThrownBy(() -> service.processOidcUser(userRequest, principal))
-                .isInstanceOf(OAuth2AuthenticationProcessingException.class)
-                .hasMessageContaining("different");
-        verify(userRepository, never()).save(any(User.class));
+        OidcUser result = service.processOidcUser(userRequest, principal);
+
+        assertThat(((UserPrincipal) result).getId()).isEqualTo(10L);
+        assertThat(otherKeycloakUser.getProviderId()).isEqualTo("kc-sub-123");
     }
 
     @Test
