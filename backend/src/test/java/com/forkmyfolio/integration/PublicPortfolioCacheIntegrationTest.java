@@ -6,11 +6,13 @@ import com.forkmyfolio.service.PortfolioProfileService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.MediaType;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.security.core.context.SecurityContextHolder;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -118,6 +120,37 @@ public class PublicPortfolioCacheIntegrationTest extends AbstractMySqlIntegratio
                 .andExpect(status().isOk())
                 .andExpect(header().string("X-Cache", "MISS"))
                 .andExpect(jsonPath("$.data.profile.headline").value(freshHeadline));
+    }
+
+    // ------------------------------------------------------------------
+    // Account edit (@CacheEvict regression): 500 -> 200 + cache evicted
+    // ------------------------------------------------------------------
+
+    @Test
+    void ownerAccountEdit_succeedsAndEvictsPublicPortfolioCache() throws Exception {
+        String jwt = realLogin(owner.getEmail(), "Password123!");
+
+        // Prime the shared cache with an anonymous view.
+        mockMvc.perform(get("/api/v1/portfolios/{slug}", slug))
+                .andExpect(status().isOk())
+                .andExpect(header().string("X-Cache", "MISS"));
+        assertThat(redisTemplate.hasKey(CACHE_KEY_PREFIX + slug)).isTrue();
+
+        // The real endpoint used by /manage/profile/edit-account. Before the
+        // fix, Spring's stale @CacheEvict(key = "#currentUser.slug") threw
+        // EL1007E and this returned HTTP 500 before the service body ran.
+        mockMvc.perform(put("/api/v1/me")
+                        .header("Authorization", "Bearer " + jwt)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"firstName\":\"Cache\",\"lastName\":\"Owner\","
+                                + "\"profileImageUrl\":\"https://example.com/avatar.png\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.firstName").value("Cache"));
+
+        assertThat(redisTemplate.hasKey(CACHE_KEY_PREFIX + slug)).isFalse();
+        mockMvc.perform(get("/api/v1/portfolios/{slug}", slug))
+                .andExpect(status().isOk())
+                .andExpect(header().string("X-Cache", "MISS"));
     }
 
     // ------------------------------------------------------------------

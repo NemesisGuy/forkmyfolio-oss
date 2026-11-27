@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.4.3] - 2026-11-27
+
+### 🐛 Fixes
+
+- **Account edits no longer return HTTP 500.** `PUT /api/v1/me` failed on every
+  save because a stale `@CacheEvict(key = "#currentUser.slug")` referenced a
+  parameter that no longer exists after the security-context refactor; Spring
+  evaluated the key to `null` and threw `EL1007E`. Cache invalidation now uses
+  the existing programmatic helper with the loaded user's real slug.
+
 ## [1.4.2] - 2026-11-27
 
 ### ✨ Features

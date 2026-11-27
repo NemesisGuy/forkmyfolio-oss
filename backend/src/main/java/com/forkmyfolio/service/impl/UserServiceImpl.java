@@ -159,14 +159,20 @@ public class UserServiceImpl implements UserService {
 
     @Override
     @Transactional
-    @CacheEvict(value = "publicPortfolios", key = "#currentUser.slug")
     public User updateUserProfile(String firstName, String lastName, String profileImageUrl) {
         User currentUser = getCurrentAuthenticatedUser();
         currentUser.setFirstName(firstName);
         currentUser.setLastName(lastName);
         currentUser.setProfileImageUrl(profileImageUrl);
         log.info("Updating profile for user: {}", currentUser.getEmail());
-        return userRepository.save(currentUser);
+        User saved = userRepository.save(currentUser);
+        // The old @CacheEvict(key = "#currentUser.slug") referenced a parameter
+        // that no longer exists after the security-context refactor. Spring
+        // resolved it to null and threw EL1007E ("slug cannot be found on
+        // null") BEFORE the body ran, turning every account edit into HTTP 500.
+        // Evict programmatically with the loaded user's real slug instead.
+        evictPublicPortfolioCache(saved.getSlug());
+        return saved;
     }
 
     @Override
