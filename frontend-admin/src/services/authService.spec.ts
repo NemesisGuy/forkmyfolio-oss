@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { authService } from './authService';
+import { logout as apiLogout, refreshToken as apiRefreshToken } from './api/auth.api';
 import { getMyAccount } from './api/user.api';
 import { usePublicPortfolioStore } from '@/stores/publicPortfolioStore';
 import { ApiError } from '@/services/api/ApiError';
@@ -124,5 +125,42 @@ describe('authService.loginWithToken (OAuth2 redirect handoff)', () => {
 
     expect(getMyAccount).not.toHaveBeenCalled();
     expect(authService.isAuthenticated.value).toBe(false);
+  });
+});
+
+/**
+ * Sticky logout (staging regression): after an explicit logout, initAuth() must
+ * not silently re-authenticate from a surviving HttpOnly refresh cookie.
+ */
+describe('authService sticky logout', () => {
+  beforeEach(() => {
+    localStorage.clear();
+    sessionStorage.clear();
+    vi.clearAllMocks();
+    authService.clearLocalSession();
+  });
+
+  it('marks logout and skips the silent refresh on the next init', async () => {
+    await authService.logout();
+
+    expect(apiLogout).toHaveBeenCalledOnce();
+    expect(localStorage.getItem('fmf_logged_out')).toBe('true');
+    expect(localStorage.getItem('accessToken')).toBeNull();
+
+    await authService.initAuth();
+
+    expect(apiRefreshToken).not.toHaveBeenCalled();
+    expect(authService.isAuthenticated.value).toBe(false);
+    expect(authService.user.value).toBeNull();
+  });
+
+  it('clears the marker on an explicit login so refresh works again', async () => {
+    localStorage.setItem('fmf_logged_out', 'true');
+    vi.mocked(getMyAccount).mockResolvedValue({ slug: 'again' } as never);
+
+    await authService.loginWithToken('new-token');
+
+    expect(localStorage.getItem('fmf_logged_out')).toBeNull();
+    expect(authService.isAuthenticated.value).toBe(true);
   });
 });

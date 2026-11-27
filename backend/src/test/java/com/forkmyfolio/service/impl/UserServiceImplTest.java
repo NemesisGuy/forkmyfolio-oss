@@ -1,21 +1,39 @@
 package com.forkmyfolio.service.impl;
 
 import com.forkmyfolio.exception.DuplicateResourceException;
+import com.forkmyfolio.model.Project;
 import com.forkmyfolio.model.User;
 import com.forkmyfolio.model.enums.AuthProvider;
 import com.forkmyfolio.model.enums.Role;
+import com.forkmyfolio.model.enums.VisitorStatType;
+import com.forkmyfolio.repository.AnnouncementReadRepository;
+import com.forkmyfolio.repository.AnnouncementRepository;
+import com.forkmyfolio.repository.ContactMessageRepository;
+import com.forkmyfolio.repository.GuestPassRepository;
+import com.forkmyfolio.repository.JobApplicationRepository;
+import com.forkmyfolio.repository.PortfolioProfileRepository;
+import com.forkmyfolio.repository.ProjectRepository;
+import com.forkmyfolio.repository.UserAnalyticsConfigRepository;
 import com.forkmyfolio.repository.UserRepository;
+import com.forkmyfolio.repository.VisitorStatsRepository;
 import com.forkmyfolio.service.RefreshTokenService;
 import com.forkmyfolio.service.SlugService;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.cache.CacheManager;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
 import java.util.HashSet;
+import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -23,6 +41,7 @@ import java.util.UUID;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -40,6 +59,27 @@ class UserServiceImplTest {
     @Mock
     private RefreshTokenService refreshTokenService;
 
+    @Mock
+    private ContactMessageRepository contactMessageRepository;
+    @Mock
+    private PortfolioProfileRepository portfolioProfileRepository;
+    @Mock
+    private AnnouncementRepository announcementRepository;
+    @Mock
+    private AnnouncementReadRepository announcementReadRepository;
+    @Mock
+    private GuestPassRepository guestPassRepository;
+    @Mock
+    private JobApplicationRepository jobApplicationRepository;
+    @Mock
+    private UserAnalyticsConfigRepository userAnalyticsConfigRepository;
+    @Mock
+    private ProjectRepository projectRepository;
+    @Mock
+    private VisitorStatsRepository visitorStatsRepository;
+    @Mock
+    private CacheManager cacheManager;
+
     @InjectMocks
     private UserServiceImpl userService;
 
@@ -56,6 +96,11 @@ class UserServiceImplTest {
         testUser.setSlug("test-user");
         testUser.setRoles(Set.of(Role.USER));
         testUser.setActive(true);
+    }
+
+    @AfterEach
+    void clearSecurityContext() {
+        SecurityContextHolder.clearContext();
     }
 
     @Test
@@ -180,5 +225,127 @@ class UserServiceImplTest {
         userService.updateUserByAdmin(uuid, "Test", "User", "test-user", Set.of(Role.USER), true);
 
         verify(refreshTokenService, never()).deleteByUserId(anyLong());
+    }
+
+    // --- Restore (soft-delete reversal) ---
+
+    @Test
+    void restoreUser_setsActiveWithoutTouchingPasswordRolesOrSlug() {
+        UUID uuid = UUID.randomUUID();
+        testUser.setUuid(uuid);
+        testUser.setActive(false);
+        testUser.setPassword("unchanged-hash");
+        Set<Role> originalRoles = new HashSet<>(Set.of(Role.USER, Role.ADMIN));
+        testUser.setRoles(originalRoles);
+        when(userRepository.findByUuid(uuid)).thenReturn(Optional.of(testUser));
+
+        User restored = userService.restoreUser(uuid);
+
+        assertTrue(restored.isActive());
+        assertEquals("unchanged-hash", restored.getPassword());
+        assertEquals(originalRoles, restored.getRoles());
+        assertEquals("test-user", restored.getSlug());
+        assertEquals("test@example.com", restored.getEmail());
+        verify(userRepository).save(testUser);
+        // Restoring must NOT revoke sessions or delete any portfolio data.
+        verifyNoInteractions(refreshTokenService, contactMessageRepository, guestPassRepository,
+                jobApplicationRepository, userAnalyticsConfigRepository, visitorStatsRepository);
+    }
+
+    @Test
+    void restoreUser_whenAlreadyActive_isIdempotent() {
+        UUID uuid = UUID.randomUUID();
+        testUser.setUuid(uuid);
+        when(userRepository.findByUuid(uuid)).thenReturn(Optional.of(testUser));
+
+        User restored = userService.restoreUser(uuid);
+
+        assertSame(testUser, restored);
+        assertTrue(restored.isActive());
+        verify(userRepository, never()).save(any(User.class));
+    }
+
+    // --- Hard delete ---
+
+    @Test
+    void hardDeleteUser_removesUserAndAllExplicitlyCleanedChildRows() {
+        UUID uuid = UUID.randomUUID();
+        testUser.setUuid(uuid);
+        when(userRepository.findByUuid(uuid)).thenReturn(Optional.of(testUser));
+
+        Project project = new Project();
+        project.setUuid(UUID.randomUUID());
+        when(projectRepository.findByUser(testUser)).thenReturn(List.of(project));
+
+        userService.hardDeleteUser(uuid);
+
+        verify(refreshTokenService).deleteByUserId(1L);
+        verify(announcementReadRepository).deleteByUser(testUser);
+        verify(announcementRepository).clearSender(testUser);
+        verify(guestPassRepository).deleteByOwner(testUser);
+        verify(jobApplicationRepository).deleteByOwner(testUser);
+        verify(userAnalyticsConfigRepository).deleteByUserId(1L);
+        verify(contactMessageRepository).deleteByUser(testUser);
+        verify(visitorStatsRepository).deleteByTypeAndRefIds(
+                eq(VisitorStatType.PORTFOLIO_VIEW), eq(List.of("test-user")));
+        verify(visitorStatsRepository).deleteByTypeAndRefIds(
+                eq(VisitorStatType.PROJECT_VIEW), eq(List.of(project.getUuid().toString())));
+        verify(userRepository).delete(testUser);
+        verify(userRepository).flush();
+    }
+
+    @Test
+    void hardDeleteUser_refusesToDeleteTheCurrentlyAuthenticatedAdmin() {
+        UUID targetUuid = UUID.randomUUID();
+        testUser.setUuid(targetUuid);
+        when(userRepository.findByUuid(targetUuid)).thenReturn(Optional.of(testUser));
+
+        // The authenticated principal resolves to the SAME account as the target.
+        testUser.setRoles(new HashSet<>(Set.of(Role.USER, Role.ADMIN)));
+        UserDetails principal = org.springframework.security.core.userdetails.User
+                .withUsername("test@example.com")
+                .password("hash")
+                .authorities(new SimpleGrantedAuthority("ROLE_ADMIN"))
+                .build();
+        SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(
+                principal, null, principal.getAuthorities()));
+        when(userRepository.findByEmail("test@example.com")).thenReturn(Optional.of(testUser));
+
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
+                () -> userService.hardDeleteUser(targetUuid));
+        assertTrue(ex.getMessage().contains("own account"));
+
+        verify(userRepository, never()).delete(any(User.class));
+        verifyNoInteractions(refreshTokenService, guestPassRepository, announcementReadRepository);
+    }
+
+    @Test
+    void hardDeleteUser_refusesToDeleteTheLastRemainingActiveAdmin() {
+        UUID uuid = UUID.randomUUID();
+        testUser.setUuid(uuid);
+        testUser.setRoles(new HashSet<>(Set.of(Role.ADMIN, Role.USER)));
+        when(userRepository.findByUuid(uuid)).thenReturn(Optional.of(testUser));
+        when(userRepository.countByRolesContainingAndActiveTrue(Role.ADMIN)).thenReturn(1L);
+
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
+                () -> userService.hardDeleteUser(uuid));
+        assertTrue(ex.getMessage().contains("last remaining active ADMIN"));
+
+        verify(userRepository, never()).delete(any(User.class));
+        verifyNoInteractions(refreshTokenService, guestPassRepository, announcementReadRepository);
+    }
+
+    @Test
+    void hardDeleteUser_allowsDeletingAnAdminWhenAnotherActiveAdminRemains() {
+        UUID uuid = UUID.randomUUID();
+        testUser.setUuid(uuid);
+        testUser.setRoles(new HashSet<>(Set.of(Role.ADMIN, Role.USER)));
+        when(userRepository.findByUuid(uuid)).thenReturn(Optional.of(testUser));
+        when(userRepository.countByRolesContainingAndActiveTrue(Role.ADMIN)).thenReturn(2L);
+        when(projectRepository.findByUser(testUser)).thenReturn(List.of());
+
+        userService.hardDeleteUser(uuid);
+
+        verify(userRepository).delete(testUser);
     }
 }

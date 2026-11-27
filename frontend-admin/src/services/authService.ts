@@ -36,6 +36,13 @@ const user: Ref<User | null> = ref(null);
  */
 const isLoading = ref(true);
 
+/**
+ * Set on explicit logout so a surviving HttpOnly refresh cookie cannot silently
+ * re-authenticate the user on the next page load (staging regression: logged
+ * out but navbar still showed the account). Cleared by any real login.
+ */
+const LOGOUT_MARKER = 'fmf_logged_out';
+
 // --- KEY CHANGE: Persist accessToken in localStorage (Normal) or sessionStorage (Guest) ---
 let accessToken: string | null = localStorage.getItem('accessToken') || sessionStorage.getItem('accessToken');
 
@@ -54,6 +61,8 @@ let refreshPromise: Promise<boolean> | null = null;
 function _updateAuthState(token: string | null, userData: User | null, isGuest: boolean = false): void {
   accessToken = token;
   if (token) {
+    // A real login (password, SSO or guest) invalidates any logout marker.
+    localStorage.removeItem(LOGOUT_MARKER);
     if (isGuest) {
       sessionStorage.setItem('accessToken', token);
       sessionStorage.setItem('isGuestSession', 'true');
@@ -185,6 +194,9 @@ async function logout(): Promise<void> {
   } catch (e) {
     console.error('[AuthService] Backend logout failed, clearing state anyway.', e);
   } finally {
+    // Sticky logout: mark it BEFORE clearing state so initAuth() will not
+    // silently refresh a surviving cookie on the next page load.
+    localStorage.setItem(LOGOUT_MARKER, 'true');
     sessionStorage.removeItem('isGuestSession'); // Explicit logout clears guest state
     clearLocalSession();
   }
@@ -262,6 +274,12 @@ async function refreshToken(): Promise<boolean> {
 async function initAuth(): Promise<void> {
   isLoading.value = true;
   try {
+    // Explicit logout must stay sticky even if the HttpOnly refresh cookie
+    // survived the backend logout call.
+    if (localStorage.getItem(LOGOUT_MARKER) === 'true') {
+      _clearAuthState();
+      return;
+    }
     // 1. If we have an accessToken in localStorage, try to use it first.
     if (accessToken) {
       try {

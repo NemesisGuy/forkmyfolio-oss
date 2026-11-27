@@ -165,6 +165,35 @@ public class AdminController {
         return ResponseEntity.ok(new ApiResponseWrapper<>(response));
     }
 
+    /**
+     * Restores a deactivated user (active = true) without touching their
+     * password, roles or portfolio data.
+     *
+     * @param userId The UUID of the user to restore.
+     * @return The restored {@link UserDto}.
+     */
+    @PostMapping("/users/{userId}/restore")
+    @Operation(summary = "Restore a soft-deleted user (Admin)")
+    public ResponseEntity<ApiResponseWrapper<UserDto>> restoreUser(@PathVariable UUID userId) {
+        User restoredUser = userService.restoreUser(userId);
+        return ResponseEntity.ok(new ApiResponseWrapper<>(userMapper.toDto(restoredUser)));
+    }
+
+    /**
+     * Permanently deletes a user and all of their data. The current admin and
+     * the last active admin are protected by the service layer (400 on abuse).
+     *
+     * @param userId The UUID of the user to hard-delete.
+     * @return A {@link ResponseEntity} with a success message.
+     */
+    @DeleteMapping("/users/{userId}/hard")
+    @Operation(summary = "Permanently delete a user (Admin)")
+    public ResponseEntity<ApiResponseWrapper<Map<String, String>>> hardDeleteUser(@PathVariable UUID userId) {
+        userService.hardDeleteUser(userId);
+        Map<String, String> response = Map.of("message", "User permanently deleted.");
+        return ResponseEntity.ok(new ApiResponseWrapper<>(response));
+    }
+
     // --- Statistics Management ---
 
     /**

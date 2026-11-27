@@ -8,6 +8,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.util.Collection;
 import java.util.Optional;
 
 @Repository
@@ -48,4 +49,13 @@ public interface VisitorStatsRepository extends JpaRepository<VisitorStats, Long
     @Query(value = "INSERT INTO visitor_stats (type, ref_id, `count`, updated_at) VALUES (:type, :refId, 0, NOW(6)) "
             + "ON DUPLICATE KEY UPDATE ref_id = ref_id", nativeQuery = true)
     int seedRowIfAbsent(@Param("type") String type, @Param("refId") String refId);
+
+    /**
+     * Removes visitor-stat counters keyed to a user's portfolio slug or to one
+     * of their project UUIDs. These rows have no FK to users, so nothing else
+     * would clean them up on a hard delete.
+     */
+    @Modifying
+    @Query("DELETE FROM VisitorStats s WHERE s.type = :type AND s.refId IN :refIds")
+    int deleteByTypeAndRefIds(@Param("type") VisitorStatType type, @Param("refIds") Collection<String> refIds);
 }

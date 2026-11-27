@@ -169,6 +169,37 @@ class AdminControllerTest {
                                 .andExpect(jsonPath("$.data.message").value("User deactivated successfully."));
         }
 
+        @Test
+        void restoreUser_shouldReturnRestoredUserDto() throws Exception {
+                UUID userId = UUID.randomUUID();
+                User restoredUser = new User();
+                UserDto restoredDto = new UserDto();
+                restoredDto.setEmail("restored@example.com");
+                restoredDto.setActive(true);
+
+                when(userService.restoreUser(eq(userId))).thenReturn(restoredUser);
+                when(userMapper.toDto(eq(restoredUser))).thenReturn(restoredDto);
+
+                mockMvc.perform(post("/api/v1/admin/users/{userId}/restore", userId))
+                                .andExpect(status().isOk())
+                                .andExpect(jsonPath("$.data.email").value("restored@example.com"))
+                                .andExpect(jsonPath("$.data.active").value(true));
+
+                verify(userService).restoreUser(userId);
+        }
+
+        @Test
+        void hardDeleteUser_shouldReturnSuccessMessage() throws Exception {
+                UUID userId = UUID.randomUUID();
+                doNothing().when(userService).hardDeleteUser(eq(userId));
+
+                mockMvc.perform(delete("/api/v1/admin/users/{userId}/hard", userId))
+                                .andExpect(status().isOk())
+                                .andExpect(jsonPath("$.data.message").value("User permanently deleted."));
+
+                verify(userService).hardDeleteUser(userId);
+        }
+
         // --- Stats Management Tests ---
 
         @Test

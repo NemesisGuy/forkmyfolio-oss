@@ -64,10 +64,26 @@ export const updateAdminUser = (userId: string, userData: Partial<User>): Promis
   });
 
 /**
- * Deactivates (soft deletes) a user.
+ * Deactivates (soft deletes) a user. The account is kept in the database
+ * and can be re-enabled via restoreUser().
  */
 export const deleteAdminUser = (userId: string): Promise<void> =>
   fetchWithAuth<void>(`/admin/users/${userId}`, { method: 'DELETE' });
+
+/**
+ * Restores a soft-deleted (inactive) user. The backend returns the restored
+ * user, so it is normalized in the same way as getAdminUserById().
+ */
+export const restoreUser = async (userId: string): Promise<User> => {
+  const user = await fetchWithAuth<User>(`/admin/users/${userId}/restore`, { method: 'POST' });
+  return normalizeUser(user);
+};
+
+/**
+ * Permanently deletes a user. Unlike deleteAdminUser() this cannot be undone.
+ */
+export const hardDeleteUser = (userId: string): Promise<void> =>
+  fetchWithAuth<void>(`/admin/users/${userId}/hard`, { method: 'DELETE' });
 
 /**
  * Fetches a list of all projects in the system.

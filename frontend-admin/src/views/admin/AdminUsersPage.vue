@@ -5,7 +5,7 @@
       <div class="d-flex justify-content-between align-items-center mb-4 animate-fade-in-up">
         <div>
           <h1 class="display-5 mb-1 glass-text">User Management</h1>
-          <p class="lead glass-subtitle mb-0">View, create, edit, and manage all system users.</p>
+          <p class="lead glass-subtitle mb-0">View, create, edit, and manage all system users (including inactive accounts).</p>
         </div>
         <router-link :to="{ name: 'admin-user-create' }" class="btn btn-primary interactive-lift">
           <UserPlus class="me-2" />Add New User
@@ -18,13 +18,27 @@
                   @close="error = ''"/>
       <SuccessModal :message="successMessage" :visible="!!successMessage" title="Success"
                     @close="successMessage = ''"/>
+      <!-- Soft delete: reversible, so it is deliberately distinct from hard delete. -->
       <ConfirmModal
         ref="confirmModalRef"
-        :message="`Are you sure you want to delete the user '${userToDelete?.firstName} ${userToDelete?.lastName}' (ID: ${userToDelete?.id})? This action cannot be undone.`"
-        title="Confirm Deletion"
-        type="danger"
+        modal-id="deactivate-user-modal"
+        :message="`Deactivate user '${userToDelete?.firstName} ${userToDelete?.lastName}' (ID: ${userToDelete?.id})? The account will be marked Inactive and can be restored later.`"
+        title="Confirm Deactivation"
+        type="warning"
+        confirm-text="Deactivate"
         @close="userToDelete = null"
         @confirm="handleDelete"
+      />
+      <!-- Hard delete: permanent and irreversible — the wording must be explicit. -->
+      <ConfirmModal
+        ref="hardDeleteModalRef"
+        modal-id="hard-delete-user-modal"
+        :message="`PERMANENTLY DELETE user '${userToHardDelete?.firstName} ${userToHardDelete?.lastName}' (ID: ${userToHardDelete?.id})? This is a PERMANENT action and cannot be undone. All data belonging to this user will be removed and cannot be recovered.`"
+        title="Permanently Delete User"
+        type="danger"
+        confirm-text="Delete Permanently"
+        @close="userToHardDelete = null"
+        @confirm="handleHardDelete"
       />
 
       <!-- User List Table -->
@@ -70,12 +84,24 @@
                       <Eye />
                     </a>
                     <button class="btn btn-outline-primary" title="Edit User"
+                            :disabled="isActionInFlight" data-testid="edit-user"
                             @click="editUser(user.id)">
                       <Pencil />
                     </button>
-                    <button class="btn btn-outline-danger" title="Delete User"
-                            @click="confirmDelete(user)">
-                      <Trash2 />
+                    <button v-if="user.active === false" class="btn btn-outline-success" title="Restore User"
+                            :disabled="isActionInFlight" data-testid="restore-user"
+                            @click="restoreAccount(user)">
+                      <RotateCcw /><span class="d-none d-lg-inline ms-1">Restore</span>
+                    </button>
+                    <button class="btn btn-outline-danger" title="Deactivate User (Soft Delete)"
+                            :disabled="user.active === false || isActionInFlight" data-testid="deactivate-user"
+                            @click="confirmDeactivate(user)">
+                      <Trash2 /><span class="d-none d-lg-inline ms-1">Deactivate</span>
+                    </button>
+                    <button class="btn btn-danger" title="Permanently Delete User (Hard Delete)"
+                            :disabled="isActionInFlight" data-testid="hard-delete-user"
+                            @click="confirmHardDelete(user)">
+                      <Trash2 /><span class="d-none d-lg-inline ms-1">Hard Delete</span>
                     </button>
                   </div>
                 </td>
@@ -92,13 +118,13 @@
           <nav aria-label="User pagination">
             <ul class="pagination pagination-sm mb-0">
               <li class="page-item" :class="{ disabled: currentPage === 0 }">
-                <button class="page-link" @click="changePage(currentPage - 1)">Previous</button>
+                <button class="page-link" :disabled="isActionInFlight" @click="changePage(currentPage - 1)">Previous</button>
               </li>
               <li v-for="p in totalPages" :key="p" class="page-item" :class="{ active: currentPage === p - 1 }">
-                <button class="page-link" @click="changePage(p - 1)">{{ p }}</button>
+                <button class="page-link" :disabled="isActionInFlight" @click="changePage(p - 1)">{{ p }}</button>
               </li>
               <li class="page-item" :class="{ disabled: currentPage === totalPages - 1 }">
-                <button class="page-link" @click="changePage(currentPage + 1)">Next</button>
+                <button class="page-link" :disabled="isActionInFlight" @click="changePage(currentPage + 1)">Next</button>
               </li>
             </ul>
           </nav>
@@ -119,10 +145,15 @@
 </template>
 
 <script setup lang="ts">
-import { UserPlus, Eye, Pencil, Trash2, Users } from 'lucide-vue-next';
+import { UserPlus, Eye, Pencil, RotateCcw, Trash2, Users } from 'lucide-vue-next';
 import {onMounted, ref} from 'vue';
 import {useRouter} from 'vue-router';
-import {deleteAdminUser, getAdminUsers} from '@/services/api/admin.api';
+import {
+  deleteAdminUser,
+  getAdminUsers,
+  hardDeleteUser,
+  restoreUser as restoreAdminUser
+} from '@/services/api/admin.api';
 import LoadingModal from '@/components/common/modals/LoadingModal.vue';
 import ErrorModal from '@/components/common/modals/ErrorModal.vue';
 import SuccessModal from '@/components/common/modals/SuccessModal.vue';
@@ -134,10 +165,13 @@ import type { User } from '@/types';
 
 const users = ref<User[]>([]);
 const isLoading = ref(true);
+const isActionInFlight = ref(false);
 const error = ref<string>('');
 const successMessage = ref<string>('');
 const userToDelete = ref<User | null>(null);
+const userToHardDelete = ref<User | null>(null);
 const confirmModalRef = ref<{ show: () => void } | null>(null);
+const hardDeleteModalRef = ref<{ show: () => void } | null>(null);
 
 // Pagination State
 const currentPage = ref(0);
@@ -157,6 +191,8 @@ const fetchUsers = async () => {
     });
 
     if (response && Array.isArray(response.content)) {
+      // Intentionally include inactive (soft-deleted) accounts so they can be
+      // found and restored. The Inactive badge marks them in the table.
       users.value = response.content;
       totalPages.value = response.totalPages || 0;
       totalElements.value = response.totalElements || 0;
@@ -188,26 +224,70 @@ const editUser = (userId: string | number) => {
   router.push({name: 'admin-user-edit', params: {id: String(userId)}});
 };
 
-const confirmDelete = (user: User) => {
+const confirmDeactivate = (user: User) => {
   userToDelete.value = user;
   confirmModalRef.value?.show();
 };
 
 const handleDelete = async () => {
   const targetUser = userToDelete.value;
-  if (!targetUser) return;
+  if (!targetUser || isActionInFlight.value) return;
 
-  isLoading.value = true;
+  isActionInFlight.value = true;
   error.value = '';
+  successMessage.value = '';
   try {
     await deleteAdminUser(String(targetUser.id));
-    successMessage.value = `User '${targetUser.firstName} ${targetUser.lastName}' has been deleted.`;
+    successMessage.value = `User '${targetUser.firstName} ${targetUser.lastName}' has been deactivated.`;
     await fetchUsers();
   } catch (err: unknown) {
-    console.error("Failed to delete user:", err);
-    error.value = (err as Error).message || 'An error occurred during deletion.';
+    console.error("Failed to deactivate user:", err);
+    error.value = (err as Error).message || 'An error occurred during deactivation.';
   } finally {
-    isLoading.value = false;
+    isActionInFlight.value = false;
+  }
+};
+
+const restoreAccount = async (user: User) => {
+  if (isActionInFlight.value) return;
+
+  isActionInFlight.value = true;
+  error.value = '';
+  successMessage.value = '';
+  try {
+    await restoreAdminUser(String(user.id));
+    successMessage.value = `User '${user.firstName} ${user.lastName}' has been restored.`;
+    await fetchUsers();
+  } catch (err: unknown) {
+    console.error("Failed to restore user:", err);
+    error.value = (err as Error).message || 'An error occurred during restoration.';
+  } finally {
+    isActionInFlight.value = false;
+  }
+};
+
+const confirmHardDelete = (user: User) => {
+  if (isActionInFlight.value) return;
+  userToHardDelete.value = user;
+  hardDeleteModalRef.value?.show();
+};
+
+const handleHardDelete = async () => {
+  const targetUser = userToHardDelete.value;
+  if (!targetUser || isActionInFlight.value) return;
+
+  isActionInFlight.value = true;
+  error.value = '';
+  successMessage.value = '';
+  try {
+    await hardDeleteUser(String(targetUser.id));
+    successMessage.value = `User '${targetUser.firstName} ${targetUser.lastName}' has been permanently deleted.`;
+    await fetchUsers();
+  } catch (err: unknown) {
+    console.error("Failed to permanently delete user:", err);
+    error.value = (err as Error).message || 'An error occurred during permanent deletion.';
+  } finally {
+    isActionInFlight.value = false;
   }
 };
 </script>

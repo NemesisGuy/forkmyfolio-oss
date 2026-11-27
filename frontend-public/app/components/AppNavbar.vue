@@ -166,6 +166,9 @@ const executeLogout = async () => {
     console.error('Error during logout:', e);
   } finally {
     try {
+      // Sticky logout marker shared with the Vue SPA: prevents initAuth() from
+      // silently re-authenticating with a surviving refresh cookie.
+      localStorage.setItem('fmf_logged_out', 'true');
       localStorage.removeItem('accessToken');
       sessionStorage.removeItem('accessToken');
       sessionStorage.removeItem('isGuestSession');

@@ -3,6 +3,7 @@ package com.forkmyfolio.repository;
 import com.forkmyfolio.model.PublicPortfolioSummary;
 import com.forkmyfolio.model.User;
 import com.forkmyfolio.model.enums.AuthProvider;
+import com.forkmyfolio.model.enums.Role;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -66,6 +67,12 @@ public interface UserRepository extends JpaRepository<User, Long> {
         Optional<User> findByUuid(UUID uuid);
 
         boolean existsByEmail(String email);
+
+        /**
+         * Counts ACTIVE accounts holding the given role. Used by the hard-delete
+         * guard that refuses to remove the last remaining active administrator.
+         */
+        long countByRolesContainingAndActiveTrue(Role role);
 
         // FIX: This query now eagerly fetches all related portfolio collections for a
         // specific user by email.

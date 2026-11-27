@@ -1,8 +1,10 @@
 package com.forkmyfolio.repository;
 
 import com.forkmyfolio.model.Announcement;
+import com.forkmyfolio.model.User;
 import com.forkmyfolio.model.enums.Role;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -22,6 +24,15 @@ public interface AnnouncementRepository extends JpaRepository<Announcement, Long
      * Deletes an announcement by its public UUID.
      */
     void deleteByUuid(UUID uuid);
+
+    /**
+     * Detaches system announcements from a user before that user is hard-deleted.
+     * {@code sender_id} is nullable and has no ON DELETE CASCADE, so the row is
+     * kept (announcements are platform data) while the FK is cleared.
+     */
+    @Modifying
+    @Query("UPDATE Announcement a SET a.sender = NULL WHERE a.sender = :sender")
+    int clearSender(@Param("sender") User sender);
 
     /**
      * Finds active announcements for a specific role or global ones.

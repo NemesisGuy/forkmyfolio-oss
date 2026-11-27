@@ -124,6 +124,29 @@ public interface UserService {
     void deactivateUser(UUID uuid);
 
     /**
+     * Restores a soft-deleted user by setting {@code active = true}. Leaves the
+     * password, roles, slug and all portfolio data untouched. Calling this on
+     * an already-active account is a no-op.
+     *
+     * @param uuid The UUID of the user to restore.
+     * @return The restored {@link User} entity.
+     */
+    User restoreUser(UUID uuid);
+
+    /**
+     * Permanently removes a user and ALL of their data (sessions, guest passes,
+     * read receipts, analytics config, messages, statistics, portfolio content).
+     *
+     * <p>Refuses to delete the currently authenticated administrator or the
+     * last remaining active ADMIN account.
+     *
+     * @param uuid The UUID of the user to delete.
+     * @throws IllegalArgumentException if the target is the caller or the last
+     *                                  active administrator.
+     */
+    void hardDeleteUser(UUID uuid);
+
+    /**
      * Finds a user by their email address.
      * Required for flows that resolve the authenticated principal's account,
      * e.g. password re-verification and backup-token issuance.

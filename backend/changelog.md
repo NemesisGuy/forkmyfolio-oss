@@ -2,6 +2,24 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.4.0] - 2026-11-27
+
+### ✨ Features
+
+- **Admin Users page: Restore and Hard Delete.** Inactive (soft-deleted)
+  accounts are now listed and can be restored with one click. Every user has a
+  Hard Delete action behind an explicit permanent-delete confirmation modal.
+  New ADMIN-only endpoints: `POST /admin/users/{id}/restore` and
+  `DELETE /admin/users/{id}/hard`. Guards prevent self-delete and deleting the
+  last active ADMIN; child rows are cleaned in FK-safe order and announcements
+  authored by a deleted user are retained with a null sender.
+
+### 🐛 Bug Fixes
+
+- **Logout is sticky.** After an explicit logout (SPA or Nuxt navbar), the
+  shared `fmf_logged_out` marker prevents `initAuth()` from silently
+  re-authenticating from a surviving refresh cookie. Any real login clears it.
+
 ## [1.3.4] - 2026-11-27
 
 ### 🐛 Bug Fixes

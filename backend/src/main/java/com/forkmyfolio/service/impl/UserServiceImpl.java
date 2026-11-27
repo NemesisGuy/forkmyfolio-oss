@@ -3,19 +3,30 @@ package com.forkmyfolio.service.impl;
 import com.forkmyfolio.exception.DuplicateResourceException;
 import com.forkmyfolio.exception.ResourceNotFoundException;
 import com.forkmyfolio.model.PortfolioProfile;
+import com.forkmyfolio.model.Project;
 import com.forkmyfolio.model.ContactMessage;
 import com.forkmyfolio.model.enums.MessagePriority;
 import com.forkmyfolio.model.enums.Role;
+import com.forkmyfolio.model.enums.VisitorStatType;
 import com.forkmyfolio.model.User;
 import com.forkmyfolio.model.enums.AuthProvider;
+import com.forkmyfolio.repository.AnnouncementReadRepository;
+import com.forkmyfolio.repository.AnnouncementRepository;
 import com.forkmyfolio.repository.ContactMessageRepository;
+import com.forkmyfolio.repository.GuestPassRepository;
+import com.forkmyfolio.repository.JobApplicationRepository;
 import com.forkmyfolio.repository.PortfolioProfileRepository;
+import com.forkmyfolio.repository.ProjectRepository;
+import com.forkmyfolio.repository.UserAnalyticsConfigRepository;
 import com.forkmyfolio.repository.UserRepository;
+import com.forkmyfolio.repository.VisitorStatsRepository;
 import com.forkmyfolio.service.RefreshTokenService;
 import com.forkmyfolio.service.SlugService;
 import com.forkmyfolio.service.UserService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.cache.Cache;
+import org.springframework.cache.CacheManager;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -31,6 +42,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Instant;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -40,6 +52,8 @@ import java.util.UUID;
 @Slf4j
 public class UserServiceImpl implements UserService {
 
+    private static final String PUBLIC_PORTFOLIO_CACHE = "publicPortfolios";
+
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final SlugService slugService;
@@ -47,6 +61,18 @@ public class UserServiceImpl implements UserService {
     private final PortfolioProfileRepository portfolioProfileRepository;
     // v1.2.11 SECURITY: deactivation must revoke live refresh sessions.
     private final RefreshTokenService refreshTokenService;
+
+    // Hard-delete cleanup of rows that the User entity's cascade/orphanRemoval
+    // does NOT cover (their FKs have no ON DELETE CASCADE, or they are keyed by a
+    // string reference such as the portfolio slug).
+    private final AnnouncementRepository announcementRepository;
+    private final AnnouncementReadRepository announcementReadRepository;
+    private final GuestPassRepository guestPassRepository;
+    private final JobApplicationRepository jobApplicationRepository;
+    private final UserAnalyticsConfigRepository userAnalyticsConfigRepository;
+    private final ProjectRepository projectRepository;
+    private final VisitorStatsRepository visitorStatsRepository;
+    private final CacheManager cacheManager;
 
     @Override
     @Transactional
@@ -191,6 +217,106 @@ public class UserServiceImpl implements UserService {
         // v1.2.11 SECURITY: revoke all refresh tokens — otherwise the
         // deactivated user keeps a working session until expiry.
         refreshTokenService.deleteByUserId(user.getId());
+    }
+
+    @Override
+    @Transactional
+    public User restoreUser(UUID uuid) {
+        User user = getUserByUuid(uuid);
+        if (user.isActive()) {
+            // Idempotent: an already-active account needs no write at all.
+            log.debug("User with UUID {} is already active — restore is a no-op.", uuid);
+        } else {
+            user.setActive(true);
+            userRepository.save(user);
+            log.info("Restored (reactivated) user with UUID: {}", uuid);
+        }
+        // A deactivated user's cached public portfolio may predate the restore.
+        evictPublicPortfolioCache(user.getSlug());
+        return user;
+    }
+
+    @Override
+    @Transactional
+    public void hardDeleteUser(UUID uuid) {
+        User user = getUserByUuid(uuid);
+
+        // --- Safety guards (before ANY destructive write) ---
+        Optional<User> currentUser = findCurrentAuthenticatedUser();
+        if (currentUser.isPresent() && isSameAccount(currentUser.get(), user)) {
+            throw new IllegalArgumentException("You cannot hard-delete your own account.");
+        }
+        if (user.isActive() && user.getRoles() != null && user.getRoles().contains(Role.ADMIN)
+                && userRepository.countByRolesContainingAndActiveTrue(Role.ADMIN) <= 1) {
+            throw new IllegalArgumentException("Cannot hard-delete the last remaining active ADMIN account.");
+        }
+
+        String slug = user.getSlug();
+        // Project UUIDs are the ref_id used by PROJECT_VIEW visitor stats — collect
+        // them BEFORE the user's projects are cascade-deleted.
+        List<String> projectStatRefIds = projectRepository.findByUser(user).stream()
+                .map(Project::getUuid)
+                .filter(Objects::nonNull)
+                .map(UUID::toString)
+                .toList();
+
+        // --- Explicit child cleanup, ordered for real MySQL FKs ---
+        // 1. Sessions first: no token may survive pointing at a removed user.
+        refreshTokenService.deleteByUserId(user.getId());
+        // 2. Announcement read receipts (FK user_id has no ON DELETE CASCADE).
+        announcementReadRepository.deleteByUser(user);
+        // 3. Announcements SENT by this user: keep the platform announcement and
+        //    detach it (sender_id is nullable, no cascade).
+        announcementRepository.clearSender(user);
+        // 4. Guest passes issued by this owner (DB has ON DELETE CASCADE, but the
+        //    association is not part of User, so delete explicitly).
+        guestPassRepository.deleteByOwner(user);
+        // 5. Job applications; their notes are removed by the entity cascade.
+        jobApplicationRepository.deleteByOwner(user);
+        // 6. Per-user analytics configuration.
+        userAnalyticsConfigRepository.deleteByUserId(user.getId());
+        // 7. Contact messages (also cascaded from User — removed explicitly so
+        //    the two paths agree).
+        contactMessageRepository.deleteByUser(user);
+        // 8. Visitor stats have no FK at all: remove counters keyed by the
+        //    portfolio slug and by this user's project UUIDs.
+        if (slug != null && !slug.isBlank()) {
+            visitorStatsRepository.deleteByTypeAndRefIds(VisitorStatType.PORTFOLIO_VIEW, List.of(slug));
+        }
+        if (!projectStatRefIds.isEmpty()) {
+            visitorStatsRepository.deleteByTypeAndRefIds(VisitorStatType.PROJECT_VIEW, projectStatRefIds);
+        }
+
+        // 9. Finally the user row: Hibernate cascades portfolio profile, projects,
+        //    skills, experience, qualifications, testimonials, settings, roles and
+        //    any remaining child collections.
+        userRepository.delete(user);
+        userRepository.flush();
+        evictPublicPortfolioCache(slug);
+        log.warn("Hard-deleted user with UUID {} (email: {}).", uuid, user.getEmail());
+    }
+
+    /** Identity check used by the self-delete guard (DB id is authoritative). */
+    private static boolean isSameAccount(User a, User b) {
+        if (a.getId() != null && b.getId() != null) {
+            return Objects.equals(a.getId(), b.getId());
+        }
+        return a.getUuid() != null && Objects.equals(a.getUuid(), b.getUuid());
+    }
+
+    /** Best-effort cache invalidation — a Redis hiccup must not fail the operation. */
+    private void evictPublicPortfolioCache(String slug) {
+        if (slug == null || slug.isBlank() || cacheManager == null) {
+            return;
+        }
+        try {
+            Cache cache = cacheManager.getCache(PUBLIC_PORTFOLIO_CACHE);
+            if (cache != null) {
+                cache.evict(slug);
+            }
+        } catch (RuntimeException e) {
+            log.warn("Could not evict public portfolio cache for slug '{}': {}", slug, e.getMessage());
+        }
     }
 
     @Override
