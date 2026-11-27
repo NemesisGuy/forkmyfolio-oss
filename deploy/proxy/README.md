@@ -22,6 +22,12 @@ that fails `nginx -t` aborts the container start (fail-fast, visible in
 ## Modes
 
 - **same-host** — full routing: `/api/` → app; `/oauth2/` → app (exact `/oauth2/redirect` → Vue SPA callback view); SPA/auth/manage/assets/`config.js`/favicon → frontend; everything else → Nuxt.
+  - **`/admin*` is intentionally a prefix match:** the nginx regex `(…|admin)` has
+    no end anchor, so `/admin`, `/admin/*`, `/admin-user` and `/admin-user/*`
+    all go to the Vue SPA. Public slugs beginning with `admin` are therefore
+    **reserved** — they can never reach a Nuxt portfolio page. This is the
+    blessed behaviour (owner decision 2026-11-27); the e2e suite targets
+    `/admin-user/*` as SPA routes.
 - **detached** — `/api/` → app; `/oauth2/` → app; everything else → Nuxt. No frontend upstream exists in this template, so the proxy starts cleanly without a frontend service; the externally hosted SPA receives the OAuth2 redirect at its own origin.
 
 The proxy never sees IdP URLs or credentials: it only forwards the backend's
