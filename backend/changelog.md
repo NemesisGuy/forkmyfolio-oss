@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.4.1] - 2026-11-27
+
+### ✨ Features
+
+- **"Use a different account" on the login/signup forms.** The SSO button now
+  has a companion link that sends `prompt=login` to the IdP (custom
+  authorization-request resolver), forcing Keycloak's login form even when a
+  browser SSO session exists — so a different email/password can be used.
+
 ## [1.4.0] - 2026-11-27
 
 ### ✨ Features

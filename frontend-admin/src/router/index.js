@@ -457,16 +457,16 @@ router.beforeEach(async (to, from, next) => {
         return next({ name: 'not-found', replace: true });
       }
 
-      // NEW: Handle Guest Pass Revocation/Expiration (401 or 403 on private portfolio)
-      if (status === 401 || (status === 403 && store.isPrivate.value)) {
-        // If they were trying to access a guest session, redirect to verification page
-        const isGuest = sessionStorage.getItem('isGuestSession') === 'true';
-        if (isGuest) {
-           // We don't have the original token here easily, but we can redirect to the login page
-           // or the guest-access page with a clear error.
-           return next({ name: 'guest-access', query: { error: 'invalid' } });
-        }
+      // Guest sessions MUST always bounce to /guest-access on ANY portfolio
+      // fetch failure — under suite load the 401 can surface as a network
+      // error (no httpStatus), and the old code then rendered /not-found with
+      // a stale guest navbar. Revocation is the only safe interpretation.
+      const isGuest = sessionStorage.getItem('isGuestSession') === 'true';
+      if (isGuest) {
+        return next({ name: 'guest-access', query: { error: 'invalid' } });
       }
+
+      // (Non-guest 401/403 failures keep the existing 404/not-found handling above.)
     }
   } else {
     // UAT-1 FIX: clear public-portfolio state on EVERY non-portfolio destination

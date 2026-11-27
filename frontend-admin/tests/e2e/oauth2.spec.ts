@@ -19,6 +19,14 @@ test.describe('OAuth2 / OIDC provisions', () => {
     expect(location).toContain('keycloak');
   });
 
+  test('login page offers a "Use a different account" link that forces prompt=login', async ({ page }) => {
+    test.skip(test.info().project.name !== 'chromium', 'requires an unauthenticated session — logged-in users are redirected away from /login');
+    await page.goto('/login');
+    const link = page.getByRole('link', { name: 'Use a different account' });
+    await expect(link).toBeVisible();
+    expect(decodeURIComponent(await link.getAttribute('href') || '')).toContain('prompt=login');
+  });
+
   test('SPA callback page renders a fixed error for ?error= (no reflected query text)', async ({ page }) => {
     const reflected = '<img src=x onerror=alert(1)>';
     await page.goto(`/oauth2/redirect?error=${encodeURIComponent(reflected)}`);

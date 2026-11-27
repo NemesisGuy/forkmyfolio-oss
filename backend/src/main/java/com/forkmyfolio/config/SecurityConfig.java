@@ -7,6 +7,7 @@ import com.forkmyfolio.security.oauth2.CustomOidcUserService;
 import com.forkmyfolio.security.oauth2.HttpCookieOAuth2AuthorizationRequestRepository;
 import com.forkmyfolio.security.oauth2.OAuth2AuthenticationFailureHandler;
 import com.forkmyfolio.security.oauth2.OAuth2AuthenticationSuccessHandler;
+import com.forkmyfolio.security.oauth2.PromptLoginAuthorizationRequestResolver;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -53,6 +54,7 @@ public class SecurityConfig {
         private final OAuth2AuthenticationSuccessHandler oAuth2AuthenticationSuccessHandler;
         private final OAuth2AuthenticationFailureHandler oAuth2AuthenticationFailureHandler;
         private final HttpCookieOAuth2AuthorizationRequestRepository httpCookieOAuth2AuthorizationRequestRepository;
+    private final PromptLoginAuthorizationRequestResolver promptLoginAuthorizationRequestResolver;
 
         @Value("${app.cors.allowed-origins}")
         private String[] allowedOrigins;
@@ -162,6 +164,7 @@ public class SecurityConfig {
                                 .oauth2Login(oauth2 -> oauth2
                                                 .authorizationEndpoint(authz -> authz
                                                                 .baseUri("/oauth2/authorize")
+                                                                .authorizationRequestResolver(promptLoginAuthorizationRequestResolver)
                                                                 .authorizationRequestRepository(
                                                                                 httpCookieOAuth2AuthorizationRequestRepository))
                                                 .redirectionEndpoint(redirection -> redirection

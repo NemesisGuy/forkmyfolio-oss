@@ -57,4 +57,17 @@ describe('LoginPage social login buttons', () => {
     expect(wrapper.find('a[href^="/oauth2/authorize/"]').exists()).toBe(false);
     wrapper.unmount();
   });
+
+  it('offers a "Use a different account" link that forces prompt=login', () => {
+    window.runtimeConfig = {
+      SOCIAL_LOGIN_ENABLED: 'true',
+      SOCIAL_PROVIDERS: 'keycloak',
+    };
+
+    const wrapper = mountPage();
+    const link = wrapper.findAll('a').find(a => a.text().includes('Use a different account'));
+    expect(link).toBeDefined();
+    expect(decodeURIComponent(link?.attributes('href') || '')).toContain('prompt=login');
+    wrapper.unmount();
+  });
 });

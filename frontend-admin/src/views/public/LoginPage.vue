@@ -59,6 +59,11 @@
                class="btn btn-outline-primary w-100 mb-2 interactive-lift">
               {{ getSocialProviderLabel(provider) }}
             </a>
+            <a v-if="socialLoginEnabled && socialProviders.length > 0"
+               :href="socialAuthorizeUrl(socialProviders[0], true)"
+               class="btn btn-link w-100 mb-2">
+              Use a different account
+            </a>
           </template>
 
           <p class="mt-4 text-center">
@@ -122,8 +127,9 @@ const socialProviders = socialConfig.providers;
  * keeps deployment hostnames out of built assets; the backend allowlist
  * (APP_OAUTH2_AUTHORIZEDREDIRECTURIS) must contain this exact URL.
  */
-const socialAuthorizeUrl = (provider: SocialProviderId): string =>
-  `/oauth2/authorize/${provider}?redirect_uri=${encodeURIComponent(`${window.location.origin}/oauth2/redirect`)}`;
+const socialAuthorizeUrl = (provider: SocialProviderId, differentAccount = false): string =>
+  `/oauth2/authorize/${provider}?redirect_uri=${encodeURIComponent(`${window.location.origin}/oauth2/redirect`)}`
+  + (differentAccount ? '&prompt=login' : '');
 
 const credentials = reactive({
   email: '',
