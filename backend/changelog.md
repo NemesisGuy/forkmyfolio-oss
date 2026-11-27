@@ -2,6 +2,26 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.4.2] - 2026-11-27
+
+### ✨ Features
+
+- **Admin user edit now saves the email address.** The admin edit form has
+  always shown an Email field, but the backend silently discarded it. `PUT
+  /api/v1/admin/users/{id}` now accepts an optional `email` (validated, trimmed;
+  blank/omitted keeps the current address). A duplicate owned by another account
+  is rejected with a clear 409 instead of a database unique-constraint error.
+  The account id, password hash, roles, slug and portfolio data are untouched.
+
+### 🐛 Fixes
+
+- **Immutable role collections no longer break admin updates.** Programmatic
+  callers passing `Set.of(...)` used to throw `UnsupportedOperationException`
+  during Hibernate merge; roles are copied into a mutable set before saving.
+- **Admin Users row actions restyled** into compact 28×28 icon buttons in a
+  single horizontal group. Soft delete now uses a distinct "user-x" icon from
+  the permanent-delete trash icon; confirmation wording is unchanged.
+
 ## [1.4.1] - 2026-11-27
 
 ### ✨ Features

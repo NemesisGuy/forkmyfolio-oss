@@ -208,7 +208,7 @@ class UserServiceImplTest {
         when(userRepository.save(any(User.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         User updated = userService.updateUserByAdmin(uuid, "Test", "User", "test-user",
-                Set.of(Role.USER), false);
+                Set.of(Role.USER), false, null);
 
         assertFalse(updated.isActive());
         verify(refreshTokenService).deleteByUserId(1L);
@@ -222,9 +222,65 @@ class UserServiceImplTest {
         when(slugService.isSlugAvailable("test-user", uuid)).thenReturn(true);
         when(userRepository.save(any(User.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
-        userService.updateUserByAdmin(uuid, "Test", "User", "test-user", Set.of(Role.USER), true);
+        userService.updateUserByAdmin(uuid, "Test", "User", "test-user", Set.of(Role.USER), true, null);
 
         verify(refreshTokenService, never()).deleteByUserId(anyLong());
+    }
+
+    @Test
+    void updateUserByAdmin_changesEmailAndKeepsIdentity() {
+        UUID uuid = UUID.randomUUID();
+        testUser.setUuid(uuid);
+        when(userRepository.findByUuid(uuid)).thenReturn(Optional.of(testUser));
+        when(slugService.isSlugAvailable("test-user", uuid)).thenReturn(true);
+        when(userRepository.findByEmail("real@example.com")).thenReturn(Optional.empty());
+        when(userRepository.save(any(User.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        User updated = userService.updateUserByAdmin(uuid, "Test", "User", "test-user",
+                Set.of(Role.USER), true, "  real@example.com  ");
+
+        assertEquals("real@example.com", updated.getEmail());
+        assertEquals(1L, updated.getId());
+        assertEquals("encodedPassword", updated.getPassword());
+        assertEquals("test-user", updated.getSlug());
+        verify(userRepository).save(testUser);
+    }
+
+    @Test
+    void updateUserByAdmin_blankOrUnchangedEmail_doesNotTouchAddress() {
+        UUID uuid = UUID.randomUUID();
+        testUser.setUuid(uuid);
+        when(userRepository.findByUuid(uuid)).thenReturn(Optional.of(testUser));
+        when(slugService.isSlugAvailable("test-user", uuid)).thenReturn(true);
+        when(userRepository.save(any(User.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        userService.updateUserByAdmin(uuid, "Test", "User", "test-user", Set.of(Role.USER), true, "   ");
+        userService.updateUserByAdmin(uuid, "Test", "User", "test-user", Set.of(Role.USER), true,
+                "TEST@EXAMPLE.COM");
+
+        assertEquals("test@example.com", testUser.getEmail());
+        verify(userRepository, never()).findByEmail(anyString());
+    }
+
+    @Test
+    void updateUserByAdmin_duplicateEmailBelongingToAnotherUser_isRejected() {
+        UUID uuid = UUID.randomUUID();
+        UUID otherUuid = UUID.randomUUID();
+        testUser.setUuid(uuid);
+        User other = new User();
+        other.setUuid(otherUuid);
+        other.setEmail("taken@example.com");
+        when(userRepository.findByUuid(uuid)).thenReturn(Optional.of(testUser));
+        when(slugService.isSlugAvailable("test-user", uuid)).thenReturn(true);
+        when(userRepository.findByEmail("taken@example.com")).thenReturn(Optional.of(other));
+
+        DuplicateResourceException ex = assertThrows(DuplicateResourceException.class,
+                () -> userService.updateUserByAdmin(uuid, "Test", "User", "test-user",
+                        Set.of(Role.USER), true, "taken@example.com"));
+
+        assertTrue(ex.getMessage().contains("taken@example.com"));
+        assertEquals("test@example.com", testUser.getEmail());
+        verify(userRepository, never()).save(any(User.class));
     }
 
     // --- Restore (soft-delete reversal) ---

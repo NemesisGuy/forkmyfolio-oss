@@ -38,6 +38,7 @@ import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 
 import java.time.Instant;
 import java.util.HashSet;
@@ -184,7 +185,7 @@ public class UserServiceImpl implements UserService {
     @Transactional
     @CacheEvict(value = "publicPortfolios", key = "#slug")
     public User updateUserByAdmin(UUID uuid, String firstName, String lastName, String slug, Set<Role> roles,
-            Boolean active) {
+            Boolean active, String email) {
         User user = getUserByUuid(uuid);
 
         // --- Slug Validation ---
@@ -192,10 +193,31 @@ public class UserServiceImpl implements UserService {
             throw new DuplicateResourceException("Slug '" + slug + "' is either reserved or taken by another user.");
         }
 
+        // --- Email (optional) ---
+        // The admin edit form has always submitted this field; older backends
+        // silently discarded it. Null/blank is a genuine no-op so legacy admin
+        // clients that never send it keep working. A collision with a DIFFERENT
+        // account is rejected before the unique constraint can throw a 500.
+        if (StringUtils.hasText(email)) {
+            String newEmail = email.trim();
+            if (!newEmail.equalsIgnoreCase(user.getEmail())) {
+                Optional<User> collision = userRepository.findByEmail(newEmail);
+                if (collision.isPresent() && !collision.get().getUuid().equals(user.getUuid())) {
+                    throw new DuplicateResourceException("Email is already in use: " + newEmail);
+                }
+                user.setEmail(newEmail);
+                log.info("Admin changed login email for user UUID: {}", uuid);
+            }
+        }
+
         user.setFirstName(firstName);
         user.setLastName(lastName);
         user.setSlug(slug);
-        user.setRoles(roles);
+        // Hibernate's merge clears/rebuilds the roles collection. An immutable
+        // Set.of(...) (any programmatic caller, and the same class of bug fixed
+        // for SSO in v1.3.3) throws UnsupportedOperationException on that path —
+        // always hand it a mutable copy.
+        user.setRoles(roles == null ? null : new HashSet<>(roles));
         user.setActive(active);
         // v1.2.11 SECURITY: an admin PUT that deactivates an account is just
         // as dangerous as the dedicated deactivation endpoint — revoke every

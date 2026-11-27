@@ -112,9 +112,12 @@ public interface UserService {
      * @param slug      The user's new slug.
      * @param roles     The user's new set of roles.
      * @param active    The user's new active status.
+     * @param email     Optional new login email; null/blank keeps the current one.
+     *                  A duplicate owned by another account is rejected.
      * @return The updated {@link User} entity.
      */
-    User updateUserByAdmin(UUID uuid, String firstName, String lastName, String slug, Set<Role> roles, Boolean active);
+    User updateUserByAdmin(UUID uuid, String firstName, String lastName, String slug, Set<Role> roles, Boolean active,
+            String email);
 
     /**
      * Deactivates a user's account (soft delete).

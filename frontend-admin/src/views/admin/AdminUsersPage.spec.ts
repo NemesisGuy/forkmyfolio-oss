@@ -98,6 +98,9 @@ const inactiveUser = {
 const rowFor = (wrapper: ReturnType<typeof mount>, id: number) =>
   wrapper.findAll('tbody tr').find((row) => row.find('td')?.text() === String(id));
 
+const actionGroup = (wrapper: ReturnType<typeof mount>, id: number) =>
+  rowFor(wrapper, id)!.find('[aria-label="User Actions"]');
+
 const hardDeleteModal = (wrapper: ReturnType<typeof mount>) =>
   wrapper.find('[data-modal-id="hard-delete-user-modal"]');
 
@@ -135,6 +138,61 @@ describe('AdminUsersPage.vue — restore and hard delete', () => {
     expect(activeRow.find('[data-testid="restore-user"]').exists()).toBe(false);
     expect(inactiveRow.find('[data-testid="restore-user"]').exists()).toBe(true);
     expect(hardDeleteModal(wrapper).exists()).toBe(true);
+
+    wrapper.unmount();
+  });
+
+  it('renders row actions as compact icon buttons in one horizontal group', async () => {
+    const wrapper = await mountPage();
+    const group = actionGroup(wrapper, 2);
+
+    expect(group.classes()).toContain('btn-group');
+    expect(group.classes()).toContain('btn-group-sm');
+    expect(group.classes()).toContain('user-actions');
+
+    const actionIds = [
+      'view-public-profile',
+      'edit-user',
+      'restore-user',
+      'deactivate-user',
+      'hard-delete-user',
+    ];
+    for (const testId of actionIds) {
+      const action = group.find(`[data-testid="${testId}"]`);
+      expect(action.exists(), `missing ${testId}`).toBe(true);
+      expect(action.classes()).toContain('btn-sm');
+      expect(action.classes()).toContain('row-action');
+      expect(action.find('svg').exists(), `${testId} should render an icon`).toBe(true);
+      expect(action.text().trim()).toBe(''); // no oversized inline labels
+      expect(action.attributes('title')).toBeTruthy();
+      expect(action.attributes('aria-label')).toBe(action.attributes('title'));
+    }
+    expect(group.findAll('span').length).toBe(0); // no residual label spans
+    expect(group.element.children.length).toBe(actionIds.length);
+
+    wrapper.unmount();
+  });
+
+  it('keeps all three lifecycle actions with their original tooltips and visual weights', async () => {
+    const wrapper = await mountPage();
+    const activeRow = rowFor(wrapper, 1)!;
+    const inactiveRow = rowFor(wrapper, 2)!;
+
+    expect(activeRow.find('[data-testid="restore-user"]').exists()).toBe(false);
+    expect(inactiveRow.find('[data-testid="restore-user"]').classes()).toContain('btn-outline-success');
+    expect(inactiveRow.find('[data-testid="restore-user"]').attributes('title')).toBe('Restore User');
+    // Deactivate stays disabled on an already-inactive row.
+    expect(inactiveRow.find('[data-testid="deactivate-user"]').attributes('disabled')).toBeDefined();
+
+    expect(activeRow.find('[data-testid="deactivate-user"]').attributes('title')).toBe(
+      'Deactivate User (Soft Delete)'
+    );
+    expect(activeRow.find('[data-testid="deactivate-user"]').classes()).toContain('btn-outline-danger');
+    expect(activeRow.find('[data-testid="hard-delete-user"]').attributes('title')).toBe(
+      'Permanently Delete User (Hard Delete)'
+    );
+    expect(activeRow.find('[data-testid="hard-delete-user"]').classes()).toContain('btn-danger');
+    expect(actionGroup(wrapper, 1).element.children.length).toBe(4); // no Restore on active rows
 
     wrapper.unmount();
   });
@@ -191,6 +249,9 @@ describe('AdminUsersPage.vue — restore and hard delete', () => {
     expect(message).toContain('PERMANENT');
     expect(message).toContain('cannot be undone');
     expect(message).toContain('Ada Lovelace');
+    expect(message).toBe(
+      "PERMANENTLY DELETE user 'Ada Lovelace' (ID: 1)? This is a PERMANENT action and cannot be undone. All data belonging to this user will be removed and cannot be recovered."
+    );
     expect(modal.find('[data-testid="confirm-action"]').text()).toBe('Delete Permanently');
 
     wrapper.unmount();
@@ -296,6 +357,9 @@ describe('AdminUsersPage.vue — restore and hard delete', () => {
     expect(softModal.find('.confirm-message').text()).toContain('restored later');
 
     await softButton.trigger('click');
+    expect(softModal.find('.confirm-message').text()).toBe(
+      "Deactivate user 'Ada Lovelace' (ID: 1)? The account will be marked Inactive and can be restored later."
+    );
     await softModal.find('[data-testid="confirm-action"]').trigger('click');
     await flushPromises();
 

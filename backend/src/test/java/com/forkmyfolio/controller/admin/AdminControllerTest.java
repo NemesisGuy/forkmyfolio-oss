@@ -142,13 +142,14 @@ class AdminControllerTest {
                 request.setRoles(Collections.singleton(Role.USER));
                 request.setSlug("updated-slug");
                 request.setActive(true);
+                request.setEmail("updated@example.com");
 
                 User updatedUser = new User();
                 UserDto updatedUserDto = new UserDto();
                 updatedUserDto.setFirstName("Updated");
 
                 when(userService.updateUserByAdmin(eq(userId), anyString(), anyString(), anyString(), any(),
-                                anyBoolean()))
+                                anyBoolean(), eq("updated@example.com")))
                                 .thenReturn(updatedUser);
                 when(userMapper.toDto(eq(updatedUser))).thenReturn(updatedUserDto);
 
@@ -157,6 +158,25 @@ class AdminControllerTest {
                                 .content(objectMapper.writeValueAsString(request)))
                                 .andExpect(status().isOk())
                                 .andExpect(jsonPath("$.data.firstName").value("Updated"));
+        }
+
+        @Test
+        void updateUserByAdmin_invalidEmail_shouldReturnBadRequest() throws Exception {
+                UUID userId = UUID.randomUUID();
+                AdminUpdateUserRequest request = new AdminUpdateUserRequest();
+                request.setFirstName("Updated");
+                request.setLastName("User");
+                request.setRoles(Collections.singleton(Role.USER));
+                request.setSlug("updated-slug");
+                request.setActive(true);
+                request.setEmail("not-an-email");
+
+                mockMvc.perform(put("/api/v1/admin/users/{userId}", userId)
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(objectMapper.writeValueAsString(request)))
+                                .andExpect(status().isBadRequest());
+                verify(userService, never()).updateUserByAdmin(any(), anyString(), anyString(), anyString(), any(),
+                                anyBoolean(), any());
         }
 
         @Test

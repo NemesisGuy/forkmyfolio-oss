@@ -1,5 +1,6 @@
 package com.forkmyfolio.integration;
 
+import com.forkmyfolio.exception.DuplicateResourceException;
 import com.forkmyfolio.model.Announcement;
 import com.forkmyfolio.model.AnnouncementRead;
 import com.forkmyfolio.model.ContactMessage;
@@ -38,6 +39,7 @@ import java.util.Set;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * Admin user lifecycle (soft delete → restore → hard delete) against REAL MySQL
@@ -180,6 +182,36 @@ public class AdminUserManagementIntegrationTest extends AbstractMySqlIntegration
         assertThat(count("SELECT COUNT(*) FROM announcements WHERE id = ?", seeded.announcementId())).isEqualTo(1);
         assertThat(count("SELECT COUNT(*) FROM announcements WHERE id = ? AND sender_id IS NULL",
                 seeded.announcementId())).isEqualTo(1);
+    }
+
+    /**
+     * Admin email change against REAL MySQL: the address is committed, the
+     * account identity/password/portfolio survive, and a collision with another
+     * user's address is rejected before the DB unique constraint can 500.
+     */
+    @Test
+    void adminUpdateEmail_persistsInRealMysqlAndRejectsAnotherUsersAddress() {
+        SeededUser a = seedUserWithData("aum-email-a");
+        SeededUser b = seedUserWithData("aum-email-b");
+        String newEmail = "email-change-" + runSuffix() + "@example.com";
+
+        User updated = userService.updateUserByAdmin(a.user().getUuid(), "Changed", "Name", a.user().getSlug(),
+                Set.of(Role.USER), true, "  " + newEmail + "  ");
+
+        assertThat(updated.getEmail()).isEqualTo(newEmail);
+        User committedA = userRepository.findByUuid(a.user().getUuid()).orElseThrow();
+        assertThat(committedA.getEmail()).isEqualTo(newEmail);
+        assertThat(committedA.getPassword()).isEqualTo(a.user().getPassword());
+        assertThat(committedA.getSlug()).isEqualTo(a.user().getSlug());
+        assertThat(count("SELECT COUNT(*) FROM users WHERE email = ?", newEmail)).isEqualTo(1);
+        assertThat(count("SELECT COUNT(*) FROM projects WHERE user_id = ?", a.user().getId())).isEqualTo(1);
+
+        assertThatThrownBy(() -> userService.updateUserByAdmin(b.user().getUuid(), "B", "User", b.user().getSlug(),
+                Set.of(Role.USER), true, newEmail))
+                .isInstanceOf(DuplicateResourceException.class)
+                .hasMessageContaining(newEmail);
+        assertThat(userRepository.findByUuid(b.user().getUuid()).orElseThrow().getEmail())
+                .isEqualTo(b.user().getEmail());
     }
 
     /** Seeds one LOCAL user with a full set of child rows across every FK path. */

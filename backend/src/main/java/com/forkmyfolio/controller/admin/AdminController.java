@@ -112,8 +112,8 @@ public class AdminController {
     }
 
     /**
-     * Updates an existing user's details, such as name, slug, roles, and activation
-     * status.
+     * Updates an existing user's details, such as name, slug, roles, activation
+     * status and (optionally) the login email.
      * 
      * @param userId  The UUID of the user to update.
      * @param request The request body containing the fields to update.
@@ -129,7 +129,8 @@ public class AdminController {
                 request.getLastName(),
                 request.getSlug(),
                 request.getRoles(),
-                request.getActive());
+                request.getActive(),
+                request.getEmail());
         return ResponseEntity.ok(new ApiResponseWrapper<>(userMapper.toDto(updatedUser)));
     }
 

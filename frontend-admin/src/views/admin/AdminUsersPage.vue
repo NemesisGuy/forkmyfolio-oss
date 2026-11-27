@@ -79,29 +79,36 @@
                     </span>
                 </td>
                 <td class="text-end">
-                  <div aria-label="User Actions" class="btn-group btn-group-sm" role="group">
-                    <a :href="'/' + user.slug" class="btn btn-outline-info" target="_blank" title="View Public Profile">
+                  <!-- Compact icon-only actions: one horizontal, nowrap group keeps the
+                       table readable at narrow widths. Tooltips (title + aria-label)
+                       carry the meaning that the removed inline labels used to show. -->
+                  <div aria-label="User Actions" class="btn-group btn-group-sm user-actions" role="group">
+                    <a :href="'/' + user.slug" class="btn btn-sm btn-outline-info row-action" target="_blank"
+                       title="View Public Profile" aria-label="View Public Profile" data-testid="view-public-profile">
                       <Eye />
                     </a>
-                    <button class="btn btn-outline-primary" title="Edit User"
-                            :disabled="isActionInFlight" data-testid="edit-user"
+                    <button type="button" class="btn btn-sm btn-outline-primary row-action" title="Edit User"
+                            aria-label="Edit User" :disabled="isActionInFlight" data-testid="edit-user"
                             @click="editUser(user.id)">
                       <Pencil />
                     </button>
-                    <button v-if="user.active === false" class="btn btn-outline-success" title="Restore User"
-                            :disabled="isActionInFlight" data-testid="restore-user"
+                    <button v-if="user.active === false" type="button"
+                            class="btn btn-sm btn-outline-success row-action" title="Restore User"
+                            aria-label="Restore User" :disabled="isActionInFlight" data-testid="restore-user"
                             @click="restoreAccount(user)">
-                      <RotateCcw /><span class="d-none d-lg-inline ms-1">Restore</span>
+                      <RotateCcw />
                     </button>
-                    <button class="btn btn-outline-danger" title="Deactivate User (Soft Delete)"
+                    <button type="button" class="btn btn-sm btn-outline-danger row-action"
+                            title="Deactivate User (Soft Delete)" aria-label="Deactivate User (Soft Delete)"
                             :disabled="user.active === false || isActionInFlight" data-testid="deactivate-user"
                             @click="confirmDeactivate(user)">
-                      <Trash2 /><span class="d-none d-lg-inline ms-1">Deactivate</span>
+                      <UserX />
                     </button>
-                    <button class="btn btn-danger" title="Permanently Delete User (Hard Delete)"
-                            :disabled="isActionInFlight" data-testid="hard-delete-user"
-                            @click="confirmHardDelete(user)">
-                      <Trash2 /><span class="d-none d-lg-inline ms-1">Hard Delete</span>
+                    <button type="button" class="btn btn-sm btn-danger row-action"
+                            title="Permanently Delete User (Hard Delete)"
+                            aria-label="Permanently Delete User (Hard Delete)" :disabled="isActionInFlight"
+                            data-testid="hard-delete-user" @click="confirmHardDelete(user)">
+                      <Trash2 />
                     </button>
                   </div>
                 </td>
@@ -145,7 +152,7 @@
 </template>
 
 <script setup lang="ts">
-import { UserPlus, Eye, Pencil, RotateCcw, Trash2, Users } from 'lucide-vue-next';
+import { UserPlus, Eye, Pencil, RotateCcw, Trash2, UserX, Users } from 'lucide-vue-next';
 import {onMounted, ref} from 'vue';
 import {useRouter} from 'vue-router';
 import {
@@ -319,6 +326,32 @@ const handleHardDelete = async () => {
   text-transform: capitalize;
 }
 
+/* Row actions: small square icon buttons in a single non-wrapping horizontal
+   group. The explicit sizing also prevents the global mobile `.btn` rule from
+   turning them back into tall blocks. */
+.user-actions {
+  display: inline-flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+}
+
+.user-actions > .row-action {
+  width: 28px;
+  height: 28px;
+  min-height: 28px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+
+.user-actions > .row-action svg {
+  width: 14px;
+  height: 14px;
+  flex: none;
+}
+
 .empty-state-icon {
   font-size: 4rem;
   color: var(--glass-text);
@@ -353,6 +386,11 @@ const handleHardDelete = async () => {
   .admin-users-page .btn {
     min-height: 44px;
     font-size: 0.9rem;
+  }
+
+  .admin-users-page .user-actions > .row-action {
+    min-height: 28px;
+    height: 28px;
   }
 
   .admin-users-page .table-responsive {
