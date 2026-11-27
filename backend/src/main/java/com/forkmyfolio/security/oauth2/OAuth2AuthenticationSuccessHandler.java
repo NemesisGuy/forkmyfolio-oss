@@ -65,11 +65,17 @@ public class OAuth2AuthenticationSuccessHandler extends SimpleUrlAuthenticationS
         Optional<String> redirectUri = CookieUtils.getCookie(request, REDIRECT_URI_PARAM_COOKIE_NAME)
                 .map(Cookie::getValue);
 
+        String targetUrl;
         if (redirectUri.isPresent() && !isAuthorizedRedirectUri(redirectUri.get())) {
-            throw new BadRequestException("Sorry! We've got an Unauthorized Redirect URI and can't proceed with the authentication");
+            // Fail SAFE, never hard: an operator-stale allowlist must not turn
+            // a successful login into HTTP 500. Drop the untrusted redirect and
+            // use OUR OWN SPA callback path (same origin) — no open redirect.
+            logger.warn("Unauthorized OAuth redirect URI rejected (" + redirectUri.get()
+                    + "); using local /oauth2/redirect");
+            targetUrl = "/oauth2/redirect";
+        } else {
+            targetUrl = redirectUri.orElse("/oauth2/redirect");
         }
-
-        String targetUrl = redirectUri.orElse(getDefaultTargetUrl());
         Long userId = resolveLocalUserId(authentication);
 
         User user = userRepository.findById(userId)

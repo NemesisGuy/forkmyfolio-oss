@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.3.4] - 2026-11-27
+
+### 🐛 Bug Fixes
+
+- **OAuth callback no longer 500s on a rejected redirect URI.** If the
+  `redirect_uri` cookie is not on the allowlist (stale Portainer env), the
+  success handler now **ignores it and redirects to the SPA's own
+  `/oauth2/redirect`** with the token. This keeps the login working and avoids
+  an open redirect; previously it threw `BadRequestException`, rendered as a
+  Whitelabel HTTP 500.
+
 ## [1.3.3] - 2026-11-26
 
 ### 🐛 Bug Fixes

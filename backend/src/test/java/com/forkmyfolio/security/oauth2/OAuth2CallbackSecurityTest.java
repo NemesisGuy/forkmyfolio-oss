@@ -150,13 +150,21 @@ class OAuth2CallbackSecurityTest {
     }
 
     @Test
-    void successHandler_rejectsUnauthorizedRedirectBeforeIssuingTokens() {
+    void successHandler_ignoresUnauthorizedRedirect_andUsesLocalCallback() {
+        User user = localUser();
+        when(userRepository.findById(5L)).thenReturn(Optional.of(user));
+        when(tokenProvider.createToken(any(Authentication.class))).thenReturn("signed.jwt");
+        when(refreshTokenService.createRefreshToken(user))
+                .thenReturn(new RefreshToken(user, "refresh-value", Instant.now()));
+
         MockHttpServletRequest request = requestWithRedirect("https://evil.example.test/steal");
         var principal = new UserPrincipal(5L, "ada@example.test", null, true, List.of());
         Authentication authentication = new UsernamePasswordAuthenticationToken(principal, null, principal.getAuthorities());
 
-        assertThatThrownBy(() -> successHandler.determineTargetUrl(request, new MockHttpServletResponse(), authentication))
-                .isInstanceOf(BadRequestException.class);
+        String targetUrl = successHandler.determineTargetUrl(request, new MockHttpServletResponse(), authentication);
+
+        assertThat(targetUrl).startsWith("/oauth2/redirect").contains("token=signed.jwt");
+        assertThat(targetUrl).doesNotContain("evil.example.test");
     }
 
     @Test
