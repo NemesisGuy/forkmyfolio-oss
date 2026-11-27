@@ -9,6 +9,24 @@ optional web analytics, and full account backup/restore.
 > [`backend/changelog.md`](backend/changelog.md) and the repository tags for
 > release notes. **Live demo:** <https://forkmyfolio.nemesisnet.co.za/nemesis>.
 
+[![Live Demo](https://img.shields.io/badge/Live-Demo-brightgreen?style=for-the-badge)](https://forkmyfolio.nemesisnet.co.za/nemesis)
+[![Latest Release](https://img.shields.io/badge/release-v1.4.2-blue?style=for-the-badge)](https://github.com/NemesisGuy/forkmyfolio-oss/releases/tag/v1.4.2)
+[![License](https://img.shields.io/badge/License-MIT-yellow?style=for-the-badge)](LICENSE)
+
+## Screenshots
+
+**Public portfolio (server-rendered):**
+
+![Public portfolio page](docs/images/public-portfolio.png)
+
+**Admin dashboard:**
+
+![Admin dashboard](docs/images/admin-dashboard.png)
+
+**User management with compact row actions:**
+
+![Admin user management](docs/images/admin-user-management.png)
+
 ## Core functionality
 
 - **Portfolio management** — profile, skills, projects, experience,
@@ -86,6 +104,19 @@ Three applications plus infrastructure, fronted by a single reverse proxy:
 | Public frontend | Nuxt 4 (SSR), Vitest |
 | Proxy | nginx (envsubst templating, startup validation) |
 | Deployment | Docker, Docker Compose |
+
+<p>
+  <img src="https://img.shields.io/badge/Java-007396?logo=java&logoColor=white" alt="Java" />
+  <img src="https://img.shields.io/badge/Spring%20Boot-6DB33F?logo=spring&logoColor=white" alt="Spring Boot" />
+  <img src="https://img.shields.io/badge/Vue.js-42B883?logo=vue.js&logoColor=white" alt="Vue.js" />
+  <img src="https://img.shields.io/badge/Nuxt-42B883?logo=nuxt&logoColor=white" alt="Nuxt" />
+  <img src="https://img.shields.io/badge/TypeScript-3178C6?logo=typescript&logoColor=white" alt="TypeScript" />
+  <img src="https://img.shields.io/badge/Python-3776AB?logo=python&logoColor=white" alt="Python" />
+  <img src="https://img.shields.io/badge/MySQL-4479A1?logo=mysql&logoColor=white" alt="MySQL" />
+  <img src="https://img.shields.io/badge/Redis-DC382D?logo=redis&logoColor=white" alt="Redis" />
+  <img src="https://img.shields.io/badge/Docker-2496ED?logo=docker&logoColor=white" alt="Docker" />
+  <img src="https://img.shields.io/badge/Nginx-009639?logo=nginx&logoColor=white" alt="Nginx" />
+</p>
 
 ## Requirements
 
